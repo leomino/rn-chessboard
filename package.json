@@ -1,10 +1,11 @@
 {
   "name": "rn-chessboard",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A lightweight and customizable chessboard for react native. Ideal for building chess applications, training tools, or integrating other chess features into your mobile app.",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
+  "types": "lib/typescript/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -63,6 +64,10 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
+  "dependencies": {
+    "chess.js": "^1.1.0",
+    "expo-haptics": "^14.0.1"
+  },
   "devDependencies": {
     "@commitlint/config-conventional": "^17.0.2",
     "@evilmartians/lefthook": "^1.5.0",
@@ -86,15 +91,15 @@
     "typescript": "^5.2.2",
     "zustand": "^5.0.3"
   },
-  "resolutions": {
-    "@types/react": "^18.2.44"
-  },
   "peerDependencies": {
     "react": "*",
     "react-native": "*",
     "react-native-gesture-handler": "*",
     "react-native-reanimated": "*",
     "zustand": "*"
+  },
+  "resolutions": {
+    "@types/react": "^18.2.44"
   },
   "workspaces": [
     "example"
@@ -189,9 +194,5 @@
     "languages": "js",
     "type": "library",
     "version": "0.48.2"
-  },
-  "dependencies": {
-    "chess.js": "^1.1.0",
-    "expo-haptics": "^14.0.1"
   }
 }

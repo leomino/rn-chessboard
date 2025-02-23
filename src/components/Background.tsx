@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { type Square } from 'chess.js';
 import { useChessStore } from '../store/chessStore';
+import { SQUARE_SIZE } from '../Constants';
 
 const Background = memo(() => {
   const orientation = useChessStore((state) => state.orientation);
@@ -28,6 +29,7 @@ const Background = memo(() => {
                   <Text
                     style={[
                       styles.designation,
+                      styles.designationRank,
                       (rank + file) % 2 === 0
                         ? styles.lightSquare
                         : styles.darkSquare,
@@ -75,18 +77,25 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'column-reverse',
     justifyContent: 'space-between',
+    width: SQUARE_SIZE,
+    height: SQUARE_SIZE,
+    aspectRatio: 1,
   },
   lightSquare: {
     backgroundColor: '#f3e4cf',
+    color: '#ceb3a2',
   },
   darkSquare: {
     backgroundColor: '#ceb3a2',
+    color: '#f3e4cf',
+  },
+  designationRank: {
+    alignSelf: 'flex-end',
   },
   designation: {
     fontSize: 14,
     fontWeight: 'medium',
     userSelect: 'none',
-    alignSelf: 'flex-end',
     margin: 1,
   },
 });

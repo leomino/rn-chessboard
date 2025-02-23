@@ -11,18 +11,18 @@ export const SQUARE_SIZE = clamp(
   72
 );
 export const pieces: Record<ChessPiece, ImageSourcePropType> = {
-  kw: require('assets/images/kingwhite.png'),
-  qw: require('assets/images/queenwhite.png'),
-  bw: require('assets/images/bishopwhite.png'),
-  nw: require('assets/images/knightwhite.png'),
-  pw: require('assets/images/pawnwhite.png'),
-  rw: require('assets/images/rookwhite.png'),
-  kb: require('assets/images/kingblack.png'),
-  qb: require('assets/images/queenblack.png'),
-  bb: require('assets/images/bishopblack.png'),
-  nb: require('assets/images/knightblack.png'),
-  pb: require('assets/images/pawnblack.png'),
-  rb: require('assets/images/rookblack.png'),
+  kw: require('./assets/images/kingwhite.png'),
+  qw: require('./assets/images/queenwhite.png'),
+  bw: require('./assets/images/bishopwhite.png'),
+  nw: require('./assets/images/knightwhite.png'),
+  pw: require('./assets/images/pawnwhite.png'),
+  rw: require('./assets/images/rookwhite.png'),
+  kb: require('./assets/images/kingblack.png'),
+  qb: require('./assets/images/queenblack.png'),
+  bb: require('./assets/images/bishopblack.png'),
+  nb: require('./assets/images/knightblack.png'),
+  pb: require('./assets/images/pawnblack.png'),
+  rb: require('./assets/images/rookblack.png'),
 };
 
 export const PromotionModalContext = createContext<() => Promise<PieceSymbol>>(
