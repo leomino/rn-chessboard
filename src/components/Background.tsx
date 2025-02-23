@@ -83,7 +83,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ceb3a2',
   },
   designation: {
-    fontFamily: 'KodeMono',
     fontSize: 14,
     fontWeight: 'medium',
     userSelect: 'none',
