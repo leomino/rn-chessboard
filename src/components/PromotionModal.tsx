@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { pieces, SQUARE_SIZE } from '@/src/Constants';
-import { useChessStore } from '@/src/store/chessStore';
-import { usePromotionStore } from '@/src/store/promotionStore';
+import { useChessStore } from '../store/chessStore';
+import { usePromotionStore } from '../store/promotionStore';
+import { pieces, SQUARE_SIZE } from '../Constants';
 
 export const PromotionModal = memo(() => {
   const chess = useChessStore((state) => state.chess);

@@ -1,8 +1,8 @@
 import { memo, useMemo } from 'react';
-import { useChessStore } from '@/src/store/chessStore';
 import { type Square } from 'chess.js';
 import { StyleSheet, View } from 'react-native';
-import { SQUARE_SIZE, toCoordinates } from '@/src/Constants';
+import { useChessStore } from '../store/chessStore';
+import { SQUARE_SIZE, toCoordinates } from '../Constants';
 
 export const SquareHighlights = memo(() => {
   const chess = useChessStore((state) => state.chess);

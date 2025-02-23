@@ -2,7 +2,7 @@ import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
 import { create } from 'zustand/index';
 import * as Haptics from 'expo-haptics';
 import { devtools } from 'zustand/middleware';
-import { usePromotionStore } from '@/src/store/promotionStore';
+import { usePromotionStore } from './promotionStore';
 
 type ChessStore = {
   chess: Chess;

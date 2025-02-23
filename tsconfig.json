@@ -2,10 +2,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "rn-chessboard": ["./src/index"],
-      "@/*": [
-        "./*"
-      ]
+      "rn-chessboard": ["./src/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

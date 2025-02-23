@@ -1,6 +1,4 @@
 import { type Color, type PieceSymbol, type Square } from 'chess.js';
-import { useChessStore } from '@/src/store/chessStore';
-import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '@/src/Constants';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -11,6 +9,8 @@ import Animated, {
 import { useMemo } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image, StyleSheet } from 'react-native';
+import { useChessStore } from '../store/chessStore';
+import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '../Constants';
 
 export const Piece = ({
   square,

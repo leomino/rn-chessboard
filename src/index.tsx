@@ -1,14 +1,14 @@
 import { StyleSheet, View } from 'react-native';
 import { forwardRef, useEffect, useImperativeHandle } from 'react';
 import { type Color } from 'chess.js';
-import { SQUARE_SIZE, toSquare } from '@/src/Constants';
-import { useChessStore } from '@/src/store/chessStore';
-import { Background } from '@/src/components/Background';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import { SquareHighlights } from '@/src/components/SquareHighlights';
-import { Piece } from '@/src/components/Piece';
-import { PromotionModal } from '@/src/components/PromotionModal';
+import { useChessStore } from './store/chessStore';
+import { SQUARE_SIZE, toSquare } from './Constants';
+import { SquareHighlights } from './components/SquareHighlights';
+import { PromotionModal } from './components/PromotionModal';
+import { Background } from './components/Background';
+import { Piece } from './components/Piece';
 
 export type ChessBoardRef = {
   setOrientation: (orientation: Color) => void;
