@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "declaration": true,
+    "outDir": "lib/typescript",
     "rootDir": ".",
     "paths": {
       "rn-chessboard": [
