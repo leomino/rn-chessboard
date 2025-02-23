@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { type Square } from 'chess.js';
 import { useChessStore } from '../store/chessStore';
 
-export const Background = memo(() => {
+const Background = memo(() => {
   const orientation = useChessStore((state) => state.orientation);
 
   return (
@@ -91,3 +91,5 @@ const styles = StyleSheet.create({
     margin: 1,
   },
 });
+
+export default Background;

@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { useChessStore } from '../store/chessStore';
 import { SQUARE_SIZE, toCoordinates } from '../Constants';
 
-export const SquareHighlights = memo(() => {
+const SquareHighlights = memo(() => {
   const chess = useChessStore((state) => state.chess);
   const selectedSquare = useChessStore((state) => state.selectedSquare);
   const orientation = useChessStore((state) => state.orientation);
@@ -148,3 +148,5 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
   },
 });
+
+export default SquareHighlights;

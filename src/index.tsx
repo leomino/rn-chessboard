@@ -1,20 +1,24 @@
 import { StyleSheet, View } from 'react-native';
 import { forwardRef, useEffect, useImperativeHandle } from 'react';
 import { type Color } from 'chess.js';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { useChessStore } from './store/chessStore';
 import { SQUARE_SIZE, toSquare } from './Constants';
-import { SquareHighlights } from './components/SquareHighlights';
-import { PromotionModal } from './components/PromotionModal';
-import { Background } from './components/Background';
-import { Piece } from './components/Piece';
+import SquareHighlights from './components/SquareHighlights';
+import PromotionModal from './components/PromotionModal';
+import Background from './components/Background';
+import Piece from './components/Piece';
 
-export type ChessBoardRef = {
+type ChessBoardRef = {
   setOrientation: (orientation: Color) => void;
 };
 
-export const ChessBoard = forwardRef(
+const ChessBoard = forwardRef(
   ({ initialOrientation }: { initialOrientation?: Color }, ref) => {
     const chess = useChessStore((state) => state.chess);
     const orientation = useChessStore((state) => state.orientation);
@@ -36,36 +40,44 @@ export const ChessBoard = forwardRef(
     });
 
     return (
-      <GestureDetector gesture={tap}>
-        <View style={styles.main}>
-          <Background />
-          <SquareHighlights />
-          <PromotionModal />
-          {chess.board().map((row) =>
-            row.map((el) => {
-              if (el != null) {
-                const { square, type, color } = el;
-                return (
-                  <Piece
-                    key={square}
-                    square={square}
-                    type={type}
-                    color={color}
-                  />
-                );
-              }
-              return null;
-            })
-          )}
-        </View>
-      </GestureDetector>
+      <GestureHandlerRootView style={styles.gestureHandler}>
+        <GestureDetector gesture={tap}>
+          <View style={styles.main}>
+            <Background />
+            <SquareHighlights />
+            <PromotionModal />
+            {chess.board().map((row) =>
+              row.map((el) => {
+                if (el != null) {
+                  const { square, type, color } = el;
+                  return (
+                    <Piece
+                      key={square}
+                      square={square}
+                      type={type}
+                      color={color}
+                    />
+                  );
+                }
+                return null;
+              })
+            )}
+          </View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     );
   }
 );
 
 const styles = StyleSheet.create({
+  gestureHandler: {
+    flex: 1,
+  },
   main: {
     aspectRatio: 1,
     width: SQUARE_SIZE * 8,
   },
 });
+
+export type { ChessBoardRef };
+export default ChessBoard;

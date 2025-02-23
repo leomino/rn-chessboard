@@ -12,7 +12,7 @@ import { Image, StyleSheet } from 'react-native';
 import { useChessStore } from '../store/chessStore';
 import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '../Constants';
 
-export const Piece = ({
+const Piece = ({
   square,
   type,
   color,
@@ -169,3 +169,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.13)',
   },
 });
+
+export default Piece;

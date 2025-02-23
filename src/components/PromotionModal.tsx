@@ -4,7 +4,7 @@ import { useChessStore } from '../store/chessStore';
 import { usePromotionStore } from '../store/promotionStore';
 import { pieces, SQUARE_SIZE } from '../Constants';
 
-export const PromotionModal = memo(() => {
+const PromotionModal = memo(() => {
   const chess = useChessStore((state) => state.chess);
   const modalOpen = usePromotionStore((state) => state.modalOpen);
   const closeModal = usePromotionStore((state) => state.closeModal);
@@ -65,3 +65,5 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 });
+
+export default PromotionModal;
