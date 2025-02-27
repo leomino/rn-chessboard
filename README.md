@@ -2,7 +2,7 @@
 
 A lightweight and customizable chessboard component for React Native. Ideal for building chess applications, training tools, or integrating chess features into your mobile app.
 
-![preview](https://github.com/user-attachments/assets/5077a64c-6ca0-4eda-b9f4-1eec5890c3be?raw=true)
+![preview](https://github.com/user-attachments/assets/5077a64c-6ca0-4eda-b9f4-1eec5890c3be)
 
 ## Features
 
