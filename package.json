@@ -1,6 +1,6 @@
 {
   "name": "rn-chessboard",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A lightweight and customizable chessboard for react native. Ideal for building chess applications, training tools, or integrating other chess features into your mobile app.",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
