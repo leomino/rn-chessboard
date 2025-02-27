@@ -2,7 +2,7 @@
 
 A lightweight and customizable chessboard component for React Native. Ideal for building chess applications, training tools, or integrating chess features into your mobile app.
 <div align="center" markdown="1">
-  <img src="./src/assets/chessboard-preview.gif" alt="preview">
+  <img src="./media/chessboard-preview.gif" alt="preview">
 </div>
 
 ## Features
