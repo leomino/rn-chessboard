@@ -1,13 +1,12 @@
 import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
-import { create } from 'zustand/index';
-import * as Haptics from 'expo-haptics';
+import { create } from 'zustand';
 import { usePromotionStore } from './promotionStore';
 
 type ChessStore = {
   chess: Chess;
-  move: (from: Square, to: Square) => void;
+  move: (from: Square, to: Square) => Promise<void>;
   selectedSquare: Square | null;
-  selectSquare: (square: Square) => void;
+  selectSquare: (square: Square) => Promise<void>;
   orientation: Color;
   setOrientation: (value: Color) => void;
 };
@@ -28,15 +27,7 @@ export const useChessStore = create<ChessStore>()((set, get) => ({
     ) {
       promotion = await usePromotionStore.getState().openModal();
     }
-    const move = chess.move({ from, to, promotion });
-    if (move) {
-      if (process.env.EXPO_OS === 'ios') {
-        if (move.isCapture() || chess.isCheck()) {
-          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        }
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    }
+    chess.move({ from, to, promotion });
     return set({ chess });
   },
   selectedSquare: null,

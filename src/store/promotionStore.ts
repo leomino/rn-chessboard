@@ -1,5 +1,5 @@
 import { type PieceSymbol } from 'chess.js';
-import { create } from 'zustand/index';
+import { create } from 'zustand';
 
 type PromotionStore = {
   modalOpen: boolean;

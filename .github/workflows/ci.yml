@@ -47,5 +47,5 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Build package
-        run: yarn prepare
+      - name: Build and test npm package in a consumer app
+        run: yarn test:package

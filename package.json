@@ -3,23 +3,35 @@
   "version": "0.1.15",
   "description": "A lightweight and customizable chessboard for react native. Ideal for building chess applications, training tools, or integrating other chess features into your mobile app.",
   "source": "./src/index.tsx",
+  "react-native": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
-  "types": "./lib/typescript/src/index.d.ts",
+  "types": "./lib/typescript/commonjs/src/index.d.ts",
+  "exports": {
+    ".": {
+      "react-native": {
+        "types": "./lib/typescript/module/src/index.d.ts",
+        "default": "./src/index.tsx"
+      },
+      "import": {
+        "types": "./lib/typescript/module/src/index.d.ts",
+        "default": "./lib/module/index.js"
+      },
+      "require": {
+        "types": "./lib/typescript/commonjs/src/index.d.ts",
+        "default": "./lib/commonjs/index.js"
+      },
+      "default": "./lib/commonjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "src",
     "lib",
-    "android",
-    "ios",
-    "cpp",
-    "*.podspec",
-    "react-native.config.js",
-    "!ios/build",
-    "!android/build",
-    "!android/gradle",
-    "!android/gradlew",
-    "!android/gradlew.bat",
-    "!android/local.properties",
+    "!**/assets/images/icon.png",
+    "!**/assets/images/adaptive-icon.png",
+    "!**/assets/images/splash-icon.png",
+    "!**/assets/images/favicon.png",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -28,10 +40,14 @@
   "scripts": {
     "example": "yarn workspace rn-chessboard-example",
     "test": "jest",
-    "typecheck": "tsc",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",
-    "prepare": "bob build",
+    "prepare": "bob build && node scripts/write-build-metadata.js",
+    "prepack": "bob build && node scripts/write-build-metadata.js",
+    "test:package": "node scripts/test-package.js",
+    "validate": "yarn lint && yarn typecheck && yarn test --runInBand && yarn test:package",
+    "prepublishOnly": "yarn validate",
     "release": "release-it"
   },
   "keywords": [
@@ -54,37 +70,41 @@
   },
   "dependencies": {
     "chess.js": "^1.1.0",
-    "expo-haptics": "^14.0.1"
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.20.0",
     "@commitlint/config-conventional": "^17.0.2",
     "@evilmartians/lefthook": "^1.5.0",
+    "@react-native/babel-preset": "0.76.7",
     "@react-native/eslint-config": "^0.73.1",
+    "@react-native/metro-config": "0.76.7",
     "@release-it/conventional-changelog": "^9.0.2",
     "@types/jest": "^29.5.5",
     "@types/react": "^18.2.44",
+    "@types/react-test-renderer": "^18.3.0",
     "commitlint": "^17.0.2",
     "del-cli": "^5.1.0",
     "eslint": "^8.51.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.1",
     "jest": "^29.7.0",
+    "metro": "^0.81.0",
     "prettier": "^3.0.3",
     "react": "18.3.1",
     "react-native": "0.76.7",
     "react-native-builder-bob": "^0.37.0",
-    "react-native-gesture-handler": "^2.24.0",
-    "react-native-reanimated": "^3.16.7",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-reanimated": "~3.16.7",
+    "react-test-renderer": "18.3.1",
     "release-it": "^17.10.0",
-    "typescript": "^5.2.2",
-    "zustand": "^5.0.3"
+    "typescript": "^5.2.2"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*",
-    "react-native-gesture-handler": "*",
-    "react-native-reanimated": "*",
-    "zustand": "*"
+    "react": "^18.3.1",
+    "react-native": "~0.76.7",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-reanimated": "~3.16.7"
   },
   "resolutions": {
     "@types/react": "^18.2.44"
@@ -95,6 +115,7 @@
   "packageManager": "yarn@3.6.1",
   "jest": {
     "preset": "react-native",
+    "watchman": false,
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
@@ -106,6 +127,9 @@
     ]
   },
   "release-it": {
+    "hooks": {
+      "before:init": "yarn validate"
+    },
     "git": {
       "commitMessage": "chore: release ${version}",
       "tagName": "v${version}"
@@ -157,11 +181,22 @@
     "source": "src",
     "output": "lib",
     "targets": [
-      "commonjs",
-      "module",
+      [
+        "commonjs",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
       [
         "typescript",
         {
+          "esm": true,
           "project": "tsconfig.build.json"
         }
       ]

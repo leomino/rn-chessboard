@@ -2,7 +2,14 @@ import ChessBoard from 'rn-chessboard';
 import type { ChessBoardRef } from 'rn-chessboard';
 import { useRef, useState } from 'react';
 import type { Color } from 'chess.js';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import {
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+} from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 export default function App() {
   const chessBoardRef = useRef<ChessBoardRef>(null);
@@ -20,7 +27,21 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.main}>
-      <ChessBoard initialOrientation={orientation} ref={chessBoardRef} />
+      <ChessBoard
+        initialOrientation={orientation}
+        ref={chessBoardRef}
+        onMove={(move) => {
+          if (Platform.OS === 'ios') {
+            Haptics.impactAsync(
+              move.isCapture() ||
+                move.san.includes('+') ||
+                move.san.includes('#')
+                ? Haptics.ImpactFeedbackStyle.Heavy
+                : Haptics.ImpactFeedbackStyle.Light
+            ).catch(console.warn);
+          }
+        }}
+      />
       <TouchableOpacity style={styles.button} onPress={toggleOrientation}>
         <Text>Flip</Text>
       </TouchableOpacity>

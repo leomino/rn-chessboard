@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
-import { forwardRef, useEffect, useImperativeHandle } from 'react';
-import { type Color } from 'chess.js';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { type Color, type Move } from 'chess.js';
 import {
   Gesture,
   GestureDetector,
@@ -18,18 +18,32 @@ type ChessBoardRef = {
   setOrientation: (orientation: Color) => void;
 };
 
-const ChessBoard = forwardRef(
-  ({ initialOrientation }: { initialOrientation?: Color }, ref) => {
+type ChessBoardProps = {
+  initialOrientation?: Color;
+  onMove?: (move: Move) => void;
+};
+
+const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
+  ({ initialOrientation, onMove }, ref) => {
     const chess = useChessStore((state) => state.chess);
     const orientation = useChessStore((state) => state.orientation);
     const setOrientation = useChessStore((state) => state.setOrientation);
     const selectSquare = useChessStore((state) => state.selectSquare);
+    const previousChess = useRef(chess);
 
     useEffect(() => {
       if (initialOrientation) {
         setOrientation(initialOrientation);
       }
-    });
+    }, [initialOrientation, setOrientation]);
+
+    useEffect(() => {
+      if (previousChess.current === chess) return;
+      previousChess.current = chess;
+      const history = chess.history({ verbose: true });
+      const move = history[history.length - 1];
+      if (move) onMove?.(move);
+    }, [chess, onMove]);
 
     useImperativeHandle(ref, () => ({
       setOrientation,
@@ -79,5 +93,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { ChessBoardRef };
+export type { ChessBoardProps, ChessBoardRef };
 export default ChessBoard;
