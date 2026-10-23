@@ -1,6 +1,5 @@
 const path = require('path');
-const { getDefaultConfig } = require('@expo/metro-config');
-const { getConfig } = require('react-native-builder-bob/metro-config');
+const { getDefaultConfig } = require('expo/metro-config');
 const pkg = require('../package.json');
 
 const root = path.resolve(__dirname, '..');
@@ -11,8 +10,14 @@ const root = path.resolve(__dirname, '..');
  *
  * @type {import('metro-config').MetroConfig}
  */
-module.exports = getConfig(getDefaultConfig(__dirname), {
-  root,
-  pkg,
-  project: __dirname,
-});
+const config = getDefaultConfig(__dirname);
+
+// Use the library source on every platform, including web, during development.
+config.resolver.resolveRequest = (context, moduleName, platform) =>
+  context.resolveRequest(
+    context,
+    moduleName === pkg.name ? path.resolve(root, pkg.source) : moduleName,
+    platform
+  );
+
+module.exports = config;

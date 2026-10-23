@@ -11,7 +11,7 @@ This project is a monorepo managed using [Yarn workspaces](https://yarnpkg.com/f
 - The library package in the root directory.
 - An example app in the `example/` directory.
 
-Use the Node version in `.nvmrc` and the pinned Yarn 3.6.1 release. To install the
+Use Node 24 LTS (24.15.0 or newer) from `.nvmrc` and the pinned Yarn 4.18.1 release. To install the
 required dependencies for each package:
 
 ```sh
@@ -23,7 +23,7 @@ yarn install --immutable
 Use Yarn for repository development and commit `yarn.lock` with dependency changes.
 Run `yarn install` when intentionally updating dependencies. Avoid generating an npm
 lockfile here. Consumers can install the published package with either npm or Yarn.
-If Corepack is unavailable, use `node .yarn/releases/yarn-3.6.1.cjs` in place of `yarn`.
+If Corepack is unavailable, use `node .yarn/releases/yarn-4.18.1.cjs` in place of `yarn`.
 
 The [example app](./example/) demonstrates usage of the library. Run it to test changes you make.
 
@@ -104,8 +104,8 @@ yarn test:package
 
 This builds the library, creates an npm tarball, installs it with the supported
 peer dependencies in a temporary consumer app, checks public TypeScript types
-with both Node and bundler resolution, verifies worklet conversion, and creates
-iOS and Android Metro bundles using legacy resolution and package exports.
+with both Node16 and bundler resolution, verifies worklet conversion, and creates
+iOS and Android Metro bundles using package exports.
 The consumer has no Expo dependency or source alias. This check needs registry
 access and cleans up the temporary app when finished. It does not replace native
 device testing of gestures and animations.

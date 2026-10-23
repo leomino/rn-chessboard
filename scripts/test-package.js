@@ -1,4 +1,3 @@
-/* eslint-env node */
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -126,7 +125,7 @@ const invalid = <ChessBoard ref={createRef<{ wrong: string }>()} />;
 export default function App() { return <ChessBoard {...props} ref={ref} />; }
 `
   );
-  for (const resolution of ['node', 'bundler']) {
+  for (const resolution of ['node16', 'bundler']) {
     run(
       process.execPath,
       [
@@ -138,7 +137,7 @@ export default function App() { return <ChessBoard {...props} ref={ref} />; }
         '--jsx',
         'react-jsx',
         '--module',
-        'esnext',
+        resolution === 'node16' ? 'node16' : 'esnext',
         '--moduleResolution',
         resolution,
         'App.tsx',
@@ -148,7 +147,7 @@ export default function App() { return <ChessBoard {...props} ref={ref} />; }
   }
 
   const preset = require.resolve('@react-native/babel-preset');
-  const plugin = consumerRequire.resolve('react-native-reanimated/plugin');
+  const plugin = consumerRequire.resolve('react-native-worklets/plugin');
   fs.writeFileSync(
     path.join(consumer, 'babel.config.js'),
     `module.exports = ${JSON.stringify({ presets: [preset], plugins: [plugin] })};`
@@ -183,23 +182,15 @@ export default function App() { return <ChessBoard {...props} ref={ref} />; }
       ),
     },
   });
-  // Exercise both legacy main-field resolution and conditional package exports.
-  for (const [platform, enableExports] of [
-    ['ios', false],
-    ['android', true],
-  ]) {
-    await Metro.runBuild(
-      mergeConfig(config, {
-        resolver: { unstable_enablePackageExports: enableExports },
-      }),
-      {
-        entry: 'App.tsx',
-        platform,
-        dev: false,
-        minify: false,
-        out: path.join(temporary, `${platform}.js`),
-      }
-    );
+  // React Native 0.88 requires package exports for its public subpaths.
+  for (const platform of ['ios', 'android']) {
+    await Metro.runBuild(config, {
+      entry: 'App.tsx',
+      platform,
+      dev: false,
+      minify: false,
+      out: path.join(temporary, `${platform}.js`),
+    });
   }
   console.log(
     'Packed-package checks passed: install, types, worklets, iOS and Android bundles.'

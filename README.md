@@ -23,58 +23,60 @@ This package is a work in progress, use it with caution.
 
 ## Installation
 
-The currently supported dependency ranges are intentionally limited to the React
-Native 0.76 / Expo SDK 52 baseline:
+The supported dependency ranges follow the React Native 0.88 / Expo SDK 58 stable
+baseline. React and React Native do not have formal LTS release lines.
 
 | Dependency | Supported range |
 | --- | --- |
-| React | `^18.3.1` |
-| React Native | `~0.76.7` |
-| React Native Gesture Handler | `~2.24.0` |
-| React Native Reanimated | `~3.16.7` |
+| React | `^19.3.0` |
+| React Native | `~0.88.0` |
+| React Native Gesture Handler | `~3.3.0` |
+| React Native Reanimated | `~4.7.1` |
+| React Native Worklets | `~0.13.0` |
 
-Reanimated 4 and newer React Native releases are not yet supported. TypeScript
-declarations are included; use TypeScript 5 or newer. Zustand and chess.js are
-installed automatically as internal dependencies. Expo is not required.
+This baseline requires the New Architecture. Use Node 24 LTS for development.
+TypeScript declarations are included; use TypeScript 5 or newer with
+`moduleResolution: "bundler"` or `"node16"`. Zustand and chess.js are installed
+automatically as internal dependencies. Expo is not required.
 
 ### React Native CLI
 
 In an existing app with compatible React and React Native versions:
 
 ```sh
-npm install rn-chessboard react-native-gesture-handler@~2.24.0 react-native-reanimated@~3.16.7
+npm install rn-chessboard react-native-gesture-handler@~3.3.0 react-native-reanimated@~4.7.1 react-native-worklets@~0.13.0
 # Or:
-yarn add rn-chessboard react-native-gesture-handler@~2.24.0 react-native-reanimated@~3.16.7
+yarn add rn-chessboard react-native-gesture-handler@~3.3.0 react-native-reanimated@~4.7.1 react-native-worklets@~0.13.0
 ```
 
-Add the Reanimated 3 plugin **last** in your app's `babel.config.js`:
+Add the Worklets plugin **last** in your app's `babel.config.js`:
 
 ```js
 module.exports = {
   presets: ['module:@react-native/babel-preset'],
-  plugins: ['react-native-reanimated/plugin'],
+  plugins: ['react-native-worklets/plugin'],
 };
 ```
 
 Install iOS pods with `cd ios && bundle exec pod install`, rebuild the native app,
 and restart Metro with `--reset-cache` after changing Babel configuration. Follow
 the [Gesture Handler setup](https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/installation/)
-and [Reanimated 3 setup](https://docs.swmansion.com/react-native-reanimated/docs/3.x/fundamentals/getting-started/)
-for your app. Keep `react-native` in Metro's `resolverMainFields` if you customize
-resolution; the package's native entry preserves worklets for your app's Babel plugin.
+and [Reanimated setup](https://docs.swmansion.com/react-native-reanimated/docs/fundamentals/getting-started/)
+for your app. Keep Metro's package exports enabled and its `react-native` condition
+when customizing resolution; the native entry preserves worklets for your app's Babel plugin.
 
-### Expo SDK 52
+### Expo SDK 58
 
-Use an SDK 52 development build with the compatible versions above:
+Install the library and SDK-compatible native dependencies:
 
 ```sh
-npm install rn-chessboard react-native-gesture-handler@~2.24.0 react-native-reanimated@~3.16.7
+npm install rn-chessboard
+npx expo install react-native-gesture-handler react-native-reanimated react-native-worklets
 ```
 
-Keep `babel-preset-expo` in your Babel configuration; SDK 52 configures the
-Reanimated plugin automatically. Rebuild with `npx expo run:ios` or
-`npx expo run:android` after installing native dependencies. Expo Go has fixed
-native dependency versions, so use a development build for this dependency set.
+Keep `babel-preset-expo` in your Babel configuration; SDK 58 configures the
+Worklets plugin automatically. Rebuild development builds with `npx expo run:ios`
+or `npx expo run:android` after installing native dependencies.
 
 ## Usage
 

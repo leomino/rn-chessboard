@@ -1,7 +1,6 @@
 import { type Color, type PieceSymbol, type Square } from 'chess.js';
 import { clamp } from 'react-native-reanimated';
-import { Dimensions } from 'react-native';
-import { type ImageSourcePropType } from 'react-native/Libraries/Image/Image';
+import { Dimensions, type ImageSourcePropType } from 'react-native';
 import { createContext } from 'react';
 
 type ChessPiece = `${PieceSymbol}${Color}`;
