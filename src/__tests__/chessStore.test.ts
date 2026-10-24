@@ -4,6 +4,7 @@ import { usePromotionStore } from '../store/promotionStore';
 
 beforeEach(() => {
   useChessStore.setState({
+    ...useChessStore.getInitialState(),
     chess: new Chess(),
     selectedSquare: null,
     orientation: 'w',
@@ -56,6 +57,7 @@ it('waits for the selected promotion piece before completing a move', async () =
   useChessStore.setState({
     chess: new Chess('7k/P7/8/8/8/8/8/7K w - - 0 1'),
   });
+  const pawnId = useChessStore.getState().pieceIds.a7;
   const pendingMove = useChessStore.getState().move('a7', 'a8');
 
   expect(usePromotionStore.getState().modalOpen).toBe(true);
@@ -65,6 +67,7 @@ it('waits for the selected promotion piece before completing a move', async () =
   await pendingMove;
 
   expect(useChessStore.getState().chess.get('a8')).toMatchObject({ type: 'n' });
+  expect(useChessStore.getState().pieceIds.a8).toBe(pawnId);
   expect(usePromotionStore.getState().modalOpen).toBe(false);
   expect(usePromotionStore.getState().modalResolver).toBeNull();
 });

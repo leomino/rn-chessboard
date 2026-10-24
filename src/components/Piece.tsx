@@ -1,6 +1,7 @@
 import { type Color, type PieceSymbol, type Square } from 'chess.js';
 import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -28,8 +29,21 @@ const Piece = ({
   const coordinates = toCoordinates(square, orientation);
 
   const panGestureActive = useSharedValue(false);
-  const panTranslation = useSharedValue({ x: 0, y: 0 });
+  const position = useSharedValue(coordinates);
   const pointerOffset = useSharedValue({ x: 0, y: 0 });
+
+  useAnimatedReaction(
+    () => ({ square, orientation }),
+    (current, previous) => {
+      if (
+        current.square !== previous?.square ||
+        current.orientation !== previous?.orientation
+      ) {
+        position.value = toCoordinates(current.square, current.orientation);
+      }
+    }
+  );
+
   const focusedSquare = useDerivedValue(() => {
     if (!panGestureActive.value) {
       return { x: 0, y: 0 };
@@ -37,16 +51,8 @@ const Piece = ({
     return toCoordinates(
       toSquare(
         {
-          x:
-            coordinates.x +
-            panTranslation.value.x +
-            pointerOffset.value.x +
-            SQUARE_SIZE / 2,
-          y:
-            coordinates.y +
-            panTranslation.value.y +
-            pointerOffset.value.y +
-            SQUARE_SIZE,
+          x: position.value.x + pointerOffset.value.x + SQUARE_SIZE / 2,
+          y: position.value.y + pointerOffset.value.y + SQUARE_SIZE,
         },
         orientation
       ),
@@ -56,25 +62,14 @@ const Piece = ({
 
   const destinations = useMemo(
     () =>
-      new Set<Square>(
-        chess
-          .moves({
-            verbose: true,
-            square,
-          })
-          .map(({ to }) => to)
-      ),
+      chess
+        .moves({
+          verbose: true,
+          square,
+        })
+        .map(({ to }) => to),
     [square, chess]
   );
-
-  const onDropPiece = (destination: Square) => {
-    if (!destinations.has(square)) {
-      panGestureActive.value = false;
-      panTranslation.value = withTiming({ x: 0, y: 0 }, { duration: 100 });
-      pointerOffset.value = withTiming({ x: 0, y: 0 }, { duration: 100 });
-    }
-    runOnJS(selectSquare)(destination);
-  };
 
   const pan = Gesture.Pan()
     .enabled(turn === color)
@@ -82,6 +77,7 @@ const Piece = ({
     .minDistance(0)
     .onBegin(() => runOnJS(selectSquare)(square))
     .onStart(({ x, y }) => {
+      position.value = coordinates;
       panGestureActive.value = true;
       pointerOffset.value = {
         x: x - SQUARE_SIZE / 2,
@@ -89,7 +85,10 @@ const Piece = ({
       };
     })
     .onChange(({ translationX, translationY }) => {
-      panTranslation.value = { x: translationX, y: translationY };
+      position.value = {
+        x: coordinates.x + translationX,
+        y: coordinates.y + translationY,
+      };
     })
     .onEnd(({ translationX, translationY }) => {
       const destination = toSquare(
@@ -103,22 +102,35 @@ const Piece = ({
         },
         orientation
       );
-      runOnJS(onDropPiece)(destination);
+      // Finish the visual drop on the UI thread before scheduling the move.
+      panGestureActive.value = false;
+      if (destinations.includes(destination)) {
+        position.value = toCoordinates(destination, orientation);
+        pointerOffset.value = { x: 0, y: 0 };
+      } else {
+        position.value = withTiming(coordinates, { duration: 100 });
+        pointerOffset.value = withTiming({ x: 0, y: 0 }, { duration: 100 });
+      }
+      runOnJS(selectSquare)(destination);
     });
 
   const animatedStyles = useAnimatedStyle(() => ({
     transform: [
       {
-        translateX:
-          coordinates.x + panTranslation.value.x + pointerOffset.value.x,
+        translateX: position.value.x + pointerOffset.value.x,
       },
       {
-        translateY:
-          coordinates.y + panTranslation.value.y + pointerOffset.value.y,
+        translateY: position.value.y + pointerOffset.value.y,
       },
       { scale: panGestureActive.value ? 2 : 1 },
     ],
-    zIndex: panGestureActive.value ? 4 : 1,
+    // Stay above a captured piece until React commits the new square.
+    zIndex:
+      panGestureActive.value ||
+      position.value.x !== coordinates.x ||
+      position.value.y !== coordinates.y
+        ? 4
+        : 1,
   }));
 
   const focusedSquareStyles = useAnimatedStyle(() => ({
@@ -135,7 +147,6 @@ const Piece = ({
       <GestureDetector gesture={pan}>
         <Animated.View style={[animatedStyles, styles.piece]}>
           <Image
-            key={square}
             style={styles.pieceSymbol}
             source={pieces[`${type}${color}`]}
           />

@@ -26,6 +26,7 @@ type ChessBoardProps = {
 const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
   ({ initialOrientation, onMove }, ref) => {
     const chess = useChessStore((state) => state.chess);
+    const pieceIds = useChessStore((state) => state.pieceIds);
     const orientation = useChessStore((state) => state.orientation);
     const setOrientation = useChessStore((state) => state.setOrientation);
     const selectSquare = useChessStore((state) => state.selectSquare);
@@ -60,13 +61,15 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
             <Background />
             <SquareHighlights />
             <PromotionModal />
-            {chess.board().map((row) =>
-              row.map((el) => {
+            {chess
+              .board()
+              .flat()
+              .map((el) => {
                 if (el != null) {
                   const { square, type, color } = el;
                   return (
                     <Piece
-                      key={square}
+                      key={pieceIds[square]}
                       square={square}
                       type={type}
                       color={color}
@@ -74,8 +77,7 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
                   );
                 }
                 return null;
-              })
-            )}
+              })}
           </View>
         </GestureDetector>
       </GestureHandlerRootView>

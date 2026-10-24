@@ -2,6 +2,19 @@
   "name": "rn-chessboard",
   "version": "0.1.15",
   "description": "A lightweight and customizable chessboard for react native. Ideal for building chess applications, training tools, or integrating other chess features into your mobile app.",
+  "scripts": {
+    "example": "yarn workspace rn-chessboard-example",
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "clean": "del-cli lib",
+    "prepare": "bob build",
+    "prepack": "bob build",
+    "test:package": "node scripts/test-package.js",
+    "validate": "yarn lint && yarn typecheck && yarn test --runInBand && yarn test:package",
+    "prepublishOnly": "yarn validate",
+    "release": "release-it"
+  },
   "source": "./src/index.tsx",
   "react-native": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
@@ -37,19 +50,6 @@
     "!**/__mocks__",
     "!**/.*"
   ],
-  "scripts": {
-    "example": "yarn workspace rn-chessboard-example",
-    "test": "jest",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "clean": "del-cli lib",
-    "prepare": "bob build",
-    "prepack": "bob build",
-    "test:package": "node scripts/test-package.js",
-    "validate": "yarn lint && yarn typecheck && yarn test --runInBand && yarn test:package",
-    "prepublishOnly": "yarn validate",
-    "release": "release-it"
-  },
   "keywords": [
     "react-native",
     "ios",
