@@ -11,10 +11,10 @@ A lightweight and customizable chessboard component for React Native. Ideal for 
 - Board rotation at any given time
 - Move highlighting (e.g. last moves, legal moves...)
 - Piece Promotion, Castling and every other legal chess move
+- Animated move-history navigation with backward and forward controls
 
 ## Coming soon
 
-- Seek through game history (undo and redo operations)
 - load games from pgn's
 - Customizable board and pieces
 
@@ -106,17 +106,83 @@ export default function App() {
 
 ### Props and ref
 
-`ChessBoardProps` and `ChessBoardRef` are exported for TypeScript consumers.
+`ChessBoardProps`, `ChessBoardRef`, and `ChessBoardHistoryState` are exported for TypeScript consumers.
 
 | Prop | Type | Description |
 | --- | --- | --- |
 | `initialOrientation` | `'w' \| 'b'` | White faces the player by default. Also updates orientation when this prop changes. |
 | `onMove` | `(move: Move) => void` | Called after a completed move, including promotion. `Move` is the chess.js move object, with `san`, `from`, `to`, and `isCapture()`. |
+| `onHistoryChange` | `(state: ChessBoardHistoryState) => void` | Receives the current history state on mount or callback replacement, then whenever the cursor, timeline length, or navigation availability changes. |
 
 `ref.current.setOrientation('w' | 'b')` rotates the board without resetting the game.
 The board currently uses shared game state: mount one board per app. Board dimensions
 are based on the window width at module load; custom sizing and independent games
 are not yet supported. iOS and Android are the primary targets; web is experimental.
+
+### Animated history navigation
+
+Connect your own buttons to the board ref:
+
+```tsx
+import { useRef, useState } from 'react';
+import { Button, Text, View } from 'react-native';
+import ChessBoard, {
+  type ChessBoardHistoryState,
+  type ChessBoardRef,
+} from 'rn-chessboard';
+
+export default function Game() {
+  const board = useRef<ChessBoardRef>(null);
+  const [history, setHistory] = useState<ChessBoardHistoryState | null>(null);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ChessBoard ref={board} onHistoryChange={setHistory} />
+      <Button
+        title="Back"
+        disabled={!history?.canGoBack}
+        onPress={() => board.current?.goBack()}
+      />
+      <Text>Position {history?.index ?? 0} / {history?.length ?? 0}</Text>
+      <Button
+        title="Forward"
+        disabled={!history?.canGoForward}
+        onPress={() => board.current?.goForward()}
+      />
+    </View>
+  );
+}
+```
+
+| Ref method | Result |
+| --- | --- |
+| `goBack()` | Starts one animated step backward. Returns `true` if accepted. |
+| `goForward()` | Starts one animated step forward. Returns `true` if accepted. |
+| `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
+
+Each step is one half-move (one player's move). The history state contains:
+
+| Field | Meaning |
+| --- | --- |
+| `index` | Applied half-moves; `0` is the initial position. |
+| `length` | Total recorded half-moves, including those ahead of the cursor. |
+| `canGoBack`, `canGoForward` | Whether that action is currently available. |
+| `isReviewing` | The displayed position is earlier than the latest position. |
+| `isAnimating` | A history transition is in progress. |
+
+The cursor updates to the target position when a step starts. Navigation becomes
+available again after its animation finishes. Requests at a boundary, during an
+animation, while dragging, or while choosing a promotion return `false`.
+
+Earlier positions are read-only: return to the latest position to continue play.
+The complete timeline is preserved while browsing. `onMove` fires for newly
+played moves; use `onHistoryChange` to respond to navigation.
+
+Playback uses synchronized 200 ms piece animations, including both pieces during
+castling, captured-piece fades, en passant restoration, and promotion reversal.
+Promotions replay the original selection. Animations respect system reduced-motion
+preferences. Rotating during playback settles the step at its target and applies
+the new orientation.
 
 ### Optional haptics
 

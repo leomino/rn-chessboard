@@ -109,15 +109,25 @@ async function main() {
   fs.writeFileSync(
     path.join(consumer, 'App.tsx'),
     `import { createRef, type ComponentRef } from 'react';
-import ChessBoard, { type ChessBoardProps, type ChessBoardRef } from 'rn-chessboard';
+import ChessBoard, { type ChessBoardProps, type ChessBoardRef, type ChessBoardHistoryState } from 'rn-chessboard';
 const ref = createRef<ChessBoardRef>();
 const inferredRef = createRef<ComponentRef<typeof ChessBoard>>();
 const props: ChessBoardProps = {
   initialOrientation: 'w',
   onMove: move => { console.log(move.san); },
+  onHistoryChange: (history: ChessBoardHistoryState) => {
+    console.log(history.index, history.length, history.canGoBack,
+      history.canGoForward, history.isReviewing, history.isAnimating);
+  },
 };
 ref.current?.setOrientation('b');
 inferredRef.current?.setOrientation('w');
+const accepted: boolean | undefined = ref.current?.goBack();
+inferredRef.current?.goForward();
+const history: ChessBoardHistoryState | undefined = ref.current?.getHistoryState();
+console.log(accepted, history);
+// @ts-expect-error Navigation takes no arguments.
+ref.current?.goForward(1);
 // @ts-expect-error Only chess.js colors are valid orientations.
 ref.current?.setOrientation('invalid');
 // @ts-expect-error Invalid ref handles must be rejected.

@@ -1,5 +1,12 @@
 import { StyleSheet, View } from 'react-native';
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { type Color, type Move } from 'chess.js';
 import {
   Gesture,
@@ -7,7 +14,10 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import { useChessStore } from './store/chessStore';
+import { shallow } from 'zustand/shallow';
+import { canPlay, selectHistoryState, useChessStore } from './store/chessStore';
+import { useHistoryAnimation } from './hooks/useHistoryAnimation';
+import { getBoardPieces, type ChessBoardHistoryState } from './utils/history';
 import { SQUARE_SIZE, toSquare } from './Constants';
 import SquareHighlights from './components/SquareHighlights';
 import PromotionModal from './components/PromotionModal';
@@ -16,21 +26,68 @@ import Piece from './components/Piece';
 
 type ChessBoardRef = {
   setOrientation: (orientation: Color) => void;
+  /** Returns true when an animated step is accepted. */
+  goBack: () => boolean;
+  /** Returns true when an animated step is accepted. */
+  goForward: () => boolean;
+  getHistoryState: () => ChessBoardHistoryState;
 };
 
 type ChessBoardProps = {
   initialOrientation?: Color;
   onMove?: (move: Move) => void;
+  onHistoryChange?: (state: ChessBoardHistoryState) => void;
 };
 
 const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
-  ({ initialOrientation, onMove }, ref) => {
+  ({ initialOrientation, onMove, onHistoryChange }, ref) => {
     const chess = useChessStore((state) => state.chess);
     const pieceIds = useChessStore((state) => state.pieceIds);
     const orientation = useChessStore((state) => state.orientation);
     const setOrientation = useChessStore((state) => state.setOrientation);
     const selectSquare = useChessStore((state) => state.selectSquare);
-    const previousChess = useRef(chess);
+    const transition = useChessStore((state) => state.transition);
+    const revision = useChessStore((state) => state.positionRevision);
+    const interactive = useChessStore(canPlay);
+    const goBack = useChessStore((state) => state.goBack);
+    const goForward = useChessStore((state) => state.goForward);
+    const getHistoryState = useChessStore((state) => state.getHistoryState);
+    const callbacks = useRef({ onMove, onHistoryChange });
+    const clock = useHistoryAnimation(transition?.id ?? null);
+    const renderedPieces = useMemo(
+      () =>
+        transition
+          ? transition.pieces.map((piece) => ({
+              ...(piece.to ?? piece.from)!,
+              transition: piece,
+            }))
+          : getBoardPieces(chess, pieceIds).map((piece) => ({
+              ...piece,
+              transition: undefined,
+            })),
+      [chess, pieceIds, transition]
+    );
+
+    useLayoutEffect(() => {
+      callbacks.current = { onMove, onHistoryChange };
+    }, [onMove, onHistoryChange]);
+
+    useLayoutEffect(
+      () =>
+        useChessStore.subscribe((state, previous) => {
+          const history = selectHistoryState(state);
+          if (!shallow(history, selectHistoryState(previous))) {
+            callbacks.current.onHistoryChange?.(history);
+          }
+          if (
+            state.lastPlayedMove &&
+            state.lastPlayedMove !== previous.lastPlayedMove
+          ) {
+            callbacks.current.onMove?.(state.lastPlayedMove);
+          }
+        }),
+      []
+    );
 
     useEffect(() => {
       if (initialOrientation) {
@@ -39,20 +96,21 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
     }, [initialOrientation, setOrientation]);
 
     useEffect(() => {
-      if (previousChess.current === chess) return;
-      previousChess.current = chess;
-      const history = chess.history({ verbose: true });
-      const move = history[history.length - 1];
-      if (move) onMove?.(move);
-    }, [chess, onMove]);
+      onHistoryChange?.(getHistoryState());
+    }, [getHistoryState, onHistoryChange]);
 
     useImperativeHandle(ref, () => ({
       setOrientation,
+      goBack,
+      goForward,
+      getHistoryState,
     }));
 
-    const tap = Gesture.Tap().onStart(({ x, y }) => {
-      runOnJS(selectSquare)(toSquare({ x, y }, orientation));
-    });
+    const tap = Gesture.Tap()
+      .enabled(interactive)
+      .onStart(({ x, y }) => {
+        runOnJS(selectSquare)(toSquare({ x, y }, orientation), revision);
+      });
 
     return (
       <GestureHandlerRootView style={styles.gestureHandler}>
@@ -61,23 +119,21 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
             <Background />
             <SquareHighlights />
             <PromotionModal />
-            {chess
-              .board()
-              .flat()
-              .map((el) => {
-                if (el != null) {
-                  const { square, type, color } = el;
-                  return (
-                    <Piece
-                      key={pieceIds[square]}
-                      square={square}
-                      type={type}
-                      color={color}
-                    />
-                  );
-                }
-                return null;
-              })}
+            {renderedPieces.map(
+              ({ id, square, type, color, transition: piece }) => (
+                <Piece
+                  key={id}
+                  square={square}
+                  type={type}
+                  color={color}
+                  playback={
+                    piece && transition
+                      ? { id: transition.id, piece, clock }
+                      : undefined
+                  }
+                />
+              )
+            )}
           </View>
         </GestureDetector>
       </GestureHandlerRootView>
@@ -95,5 +151,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { ChessBoardProps, ChessBoardRef };
+export type { ChessBoardProps, ChessBoardRef, ChessBoardHistoryState };
 export default ChessBoard;

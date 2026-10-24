@@ -10,39 +10,75 @@ import Animated, {
 import { useMemo } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image, StyleSheet } from 'react-native';
-import { useChessStore } from '../store/chessStore';
+import { canPlay, useChessStore } from '../store/chessStore';
 import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '../Constants';
+import type { PieceTransition } from '../utils/history';
+import type { HistoryAnimation } from '../hooks/useHistoryAnimation';
 
 const Piece = ({
   square,
   type,
   color,
+  playback,
 }: {
   square: Square;
   type: PieceSymbol;
   color: Color;
+  playback?: {
+    id: number;
+    piece: PieceTransition;
+    clock: HistoryAnimation;
+  };
 }) => {
   const chess = useChessStore((state) => state.chess);
   const orientation = useChessStore((state) => state.orientation);
   const turn = useChessStore((state) => state.chess.turn());
-  const selectSquare = useChessStore((state) => state.selectSquare);
+  const interactive = useChessStore(canPlay);
+  const revision = useChessStore((state) => state.positionRevision);
+  const beginDrag = useChessStore((state) => state.beginDrag);
+  const endDrag = useChessStore((state) => state.endDrag);
   const coordinates = toCoordinates(square, orientation);
+  const origin = toCoordinates(
+    playback?.piece.from?.square ?? square,
+    orientation
+  );
+  const target = toCoordinates(
+    playback?.piece.to?.square ?? square,
+    orientation
+  );
+  const displayType = playback?.piece.from?.type ?? type;
 
   const panGestureActive = useSharedValue(false);
+  const gesturePosition = useSharedValue({ revision, orientation });
   const position = useSharedValue(coordinates);
   const pointerOffset = useSharedValue({ x: 0, y: 0 });
 
   useAnimatedReaction(
-    () => ({ square, orientation }),
+    () => ({ square, orientation, revision }),
     (current, previous) => {
       if (
         current.square !== previous?.square ||
-        current.orientation !== previous?.orientation
+        current.orientation !== previous?.orientation ||
+        current.revision !== previous?.revision
       ) {
+        gesturePosition.value = {
+          revision: current.revision,
+          orientation: current.orientation,
+        };
         position.value = toCoordinates(current.square, current.orientation);
+        pointerOffset.value = { x: 0, y: 0 };
+        panGestureActive.value = false;
       }
     }
   );
+
+  const isCurrentGesture = () => {
+    'worklet';
+    return (
+      gesturePosition.value.revision === revision &&
+      gesturePosition.value.orientation === orientation
+    );
+  };
 
   const focusedSquare = useDerivedValue(() => {
     if (!panGestureActive.value) {
@@ -72,11 +108,12 @@ const Piece = ({
   );
 
   const pan = Gesture.Pan()
-    .enabled(turn === color)
+    .enabled(!playback && interactive && turn === color)
     .minVelocity(0)
     .minDistance(0)
-    .onBegin(() => runOnJS(selectSquare)(square))
+    .onBegin(() => runOnJS(beginDrag)(square, revision))
     .onStart(({ x, y }) => {
+      if (!isCurrentGesture()) return;
       position.value = coordinates;
       panGestureActive.value = true;
       pointerOffset.value = {
@@ -85,12 +122,14 @@ const Piece = ({
       };
     })
     .onChange(({ translationX, translationY }) => {
+      if (!isCurrentGesture()) return;
       position.value = {
         x: coordinates.x + translationX,
         y: coordinates.y + translationY,
       };
     })
-    .onEnd(({ translationX, translationY }) => {
+    .onEnd(({ translationX, translationY }, success) => {
+      if (success === false || !isCurrentGesture()) return;
       const destination = toSquare(
         {
           x:
@@ -111,27 +150,59 @@ const Piece = ({
         position.value = withTiming(coordinates, { duration: 100 });
         pointerOffset.value = withTiming({ x: 0, y: 0 }, { duration: 100 });
       }
-      runOnJS(selectSquare)(destination);
+      runOnJS(endDrag)(square, destination, revision);
+    })
+    .onFinalize((_event, success) => {
+      if (!isCurrentGesture()) return;
+      if (!success) {
+        panGestureActive.value = false;
+        position.value = withTiming(coordinates, { duration: 100 });
+        pointerOffset.value = withTiming({ x: 0, y: 0 }, { duration: 100 });
+        runOnJS(endDrag)(square, null, revision);
+      }
     });
 
-  const animatedStyles = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateX: position.value.x + pointerOffset.value.x,
-      },
-      {
-        translateY: position.value.y + pointerOffset.value.y,
-      },
-      { scale: panGestureActive.value ? 2 : 1 },
-    ],
-    // Stay above a captured piece until React commits the new square.
-    zIndex:
-      panGestureActive.value ||
-      position.value.x !== coordinates.x ||
-      position.value.y !== coordinates.y
-        ? 4
-        : 1,
-  }));
+  const animatedStyles = useAnimatedStyle(() => {
+    if (playback) {
+      const { clock, id, piece } = playback;
+      // A new render may arrive before its UI-thread clock starts. Old render
+      // worklets must also stay at the end when a newer transition starts.
+      const progress =
+        clock.activeId.value === id
+          ? clock.progress.value
+          : clock.activeId.value < id
+            ? 0
+            : 1;
+      return {
+        transform: [
+          { translateX: origin.x + (target.x - origin.x) * progress },
+          { translateY: origin.y + (target.y - origin.y) * progress },
+          { scale: 1 },
+        ],
+        opacity: !piece.from
+          ? Math.min(1, progress * 3)
+          : !piece.to
+            ? Math.min(1, (1 - progress) * 3)
+            : 1,
+        zIndex: origin.x !== target.x || origin.y !== target.y ? 4 : 1,
+      };
+    }
+    return {
+      transform: [
+        { translateX: position.value.x + pointerOffset.value.x },
+        { translateY: position.value.y + pointerOffset.value.y },
+        { scale: panGestureActive.value ? 2 : 1 },
+      ],
+      opacity: 1,
+      // Stay above a captured piece until React commits the new square.
+      zIndex:
+        panGestureActive.value ||
+        position.value.x !== coordinates.x ||
+        position.value.y !== coordinates.y
+          ? 4
+          : 1,
+    };
+  });
 
   const focusedSquareStyles = useAnimatedStyle(() => ({
     transform: [
@@ -139,7 +210,7 @@ const Piece = ({
       { translateY: focusedSquare.value.y },
       { scale: 2.2 },
     ],
-    opacity: panGestureActive.value ? 1 : 0,
+    opacity: !playback && panGestureActive.value ? 1 : 0,
   }));
 
   return (
@@ -148,7 +219,7 @@ const Piece = ({
         <Animated.View style={[animatedStyles, styles.piece]}>
           <Image
             style={styles.pieceSymbol}
-            source={pieces[`${type}${color}`]}
+            source={pieces[`${displayType}${color}`]}
           />
         </Animated.View>
       </GestureDetector>
