@@ -10,7 +10,7 @@ import {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { useChessStore } from '../store/chessStore';
+import { useChessStore } from '../store/BoardContext';
 import { toCoordinates } from '../Constants';
 import type { HistoryTransition } from '../utils/history';
 import {
@@ -26,7 +26,8 @@ export type HistoryAnimation = {
 
 export function useHistoryAnimation(
   transition: HistoryTransition | null,
-  orientation: Color
+  orientation: Color,
+  squareSize: number
 ): HistoryAnimation {
   const id = transition?.id ?? null;
   const duration = transition?.duration ?? 200;
@@ -40,28 +41,29 @@ export function useHistoryAnimation(
       const to = (piece.to ?? piece.from)!;
       animations[piece.id] = {
         from: {
-          ...toCoordinates(from.square, orientation),
+          ...toCoordinates(from.square, orientation, squareSize),
           opacity: piece.from ? 1 : 0,
         },
         to: {
-          ...toCoordinates(to.square, orientation),
+          ...toCoordinates(to.square, orientation, squareSize),
           opacity: piece.to ? 1 : 0,
         },
       };
     }
     return animations;
-  }, [transition, orientation]);
+  }, [transition, orientation, squareSize]);
   const finishTransition = useChessStore((state) => state.finishTransition);
   const releaseInteractions = useChessStore(
     (state) => state.releaseInteractions
   );
 
   useAnimatedReaction(
-    () => ({ id, orientation, targets, duration }),
+    () => ({ id, orientation, targets, duration, squareSize }),
     (current, previous) => {
       if (
         current.id === previous?.id &&
-        current.orientation === previous?.orientation
+        current.orientation === previous?.orientation &&
+        current.squareSize === previous?.squareSize
       )
         return;
       cancelAnimation(progress);
@@ -74,7 +76,10 @@ export function useHistoryAnimation(
       // Sample the UI-thread clock before resetting it. Every piece starts the
       // next transition at its visible location/opacity, even during fast seeks.
       pieces.value = retargetPieceAnimations(
-        current.orientation === previous?.orientation ? pieces.value : {},
+        current.orientation === previous?.orientation &&
+          current.squareSize === previous?.squareSize
+          ? pieces.value
+          : {},
         current.targets,
         progress.value
       );

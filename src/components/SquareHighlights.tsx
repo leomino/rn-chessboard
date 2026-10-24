@@ -1,10 +1,11 @@
 import { memo, useMemo } from 'react';
 import { type Square } from 'chess.js';
 import { StyleSheet, View } from 'react-native';
-import { useChessStore } from '../store/chessStore';
-import { SQUARE_SIZE, toCoordinates } from '../Constants';
+import { useChessStore } from '../store/BoardContext';
+import { useSquareSize, toCoordinates } from '../Constants';
 
 const SquareHighlights = memo(() => {
+  const squareSize = useSquareSize();
   const chess = useChessStore((state) => state.chess);
   const selectedSquare = useChessStore((state) => state.selectedSquare);
   const orientation = useChessStore((state) => state.orientation);
@@ -17,22 +18,22 @@ const SquareHighlights = memo(() => {
     if (!lastMove) {
       return undefined;
     }
-    return toCoordinates(lastMove.from, orientation);
-  }, [lastMove, orientation]);
+    return toCoordinates(lastMove.from, orientation, squareSize);
+  }, [lastMove, orientation, squareSize]);
 
   const lastMoveDestination = useMemo(() => {
     if (!lastMove) {
       return undefined;
     }
-    return toCoordinates(lastMove.to, orientation);
-  }, [lastMove, orientation]);
+    return toCoordinates(lastMove.to, orientation, squareSize);
+  }, [lastMove, orientation, squareSize]);
 
   const selectedSquareCoordinates = useMemo(() => {
     if (!selectedSquare) {
       return undefined;
     }
-    return toCoordinates(selectedSquare, orientation);
-  }, [selectedSquare, orientation]);
+    return toCoordinates(selectedSquare, orientation, squareSize);
+  }, [selectedSquare, orientation, squareSize]);
 
   const destinations = useMemo(() => {
     if (!selectedSquare) {
@@ -47,8 +48,8 @@ const SquareHighlights = memo(() => {
           })
           .map(({ to }) => to)
       ),
-    ].map((square) => toCoordinates(square, orientation));
-  }, [chess, selectedSquare, orientation]);
+    ].map((square) => toCoordinates(square, orientation, squareSize));
+  }, [chess, selectedSquare, orientation, squareSize]);
 
   return (
     <>
@@ -56,6 +57,7 @@ const SquareHighlights = memo(() => {
         <View
           style={[
             styles.lastMoveOrigin,
+            { width: squareSize },
             {
               transform: [
                 { translateX: lastMoveOrigin.x },
@@ -69,6 +71,7 @@ const SquareHighlights = memo(() => {
         <View
           style={[
             styles.lastMoveDestination,
+            { width: squareSize },
             {
               transform: [
                 { translateX: lastMoveDestination.x ?? 0 },
@@ -82,6 +85,7 @@ const SquareHighlights = memo(() => {
         <View
           style={[
             styles.selectedSquareCoordinates,
+            { width: squareSize },
             {
               transform: [
                 { translateX: selectedSquareCoordinates.x ?? 0 },
@@ -97,6 +101,7 @@ const SquareHighlights = memo(() => {
             key={`${x}-${y}`}
             style={[
               styles.destinations,
+              { width: squareSize },
               {
                 transform: [
                   { translateX: x },
@@ -114,21 +119,18 @@ const SquareHighlights = memo(() => {
 
 const styles = StyleSheet.create({
   lastMoveOrigin: {
-    width: SQUARE_SIZE,
     pointerEvents: 'none',
     position: 'absolute',
     backgroundColor: 'rgba(255,248,176,0.4)',
     aspectRatio: 1,
   },
   lastMoveDestination: {
-    width: SQUARE_SIZE,
     pointerEvents: 'none',
     position: 'absolute',
     backgroundColor: '#fff8b0',
     aspectRatio: 1,
   },
   selectedSquareCoordinates: {
-    width: SQUARE_SIZE,
     pointerEvents: 'none',
     position: 'absolute',
     backgroundColor: '#fff8b0',
@@ -137,7 +139,6 @@ const styles = StyleSheet.create({
   destinations: {
     position: 'absolute',
     aspectRatio: 1,
-    width: SQUARE_SIZE,
     borderRadius: 100,
     backgroundColor: 'rgba(0,0,0,0.25)',
     zIndex: 2,

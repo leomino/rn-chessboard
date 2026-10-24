@@ -3,14 +3,19 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { Chess, type Square } from 'chess.js';
 import { cancelAnimation, withTiming } from 'react-native-reanimated';
 import ChessBoard, { type ChessBoardRef } from '../index';
-import { useChessStore } from '../store/chessStore';
-import { usePromotionStore } from '../store/promotionStore';
+import { useChessStore, usePromotionStore } from '../__fixtures__/store';
 import { samplePieceAnimation } from '../utils/historyAnimation';
 import type { HistoryAnimation } from '../hooks/useHistoryAnimation';
+
+jest.mock('../store/chessStore', () => ({
+  ...jest.requireActual('../store/chessStore'),
+  createChessStore: () => require('../__fixtures__/store').useChessStore,
+}));
 
 jest.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   View: 'View',
+  useWindowDimensions: () => ({ width: 320 }),
 }));
 jest.mock('react-native-gesture-handler', () => ({
   GestureHandlerRootView: 'GestureHandlerRootView',
@@ -45,6 +50,7 @@ jest.mock('react-native-reanimated', () => ({
   },
 }));
 jest.mock('../Constants', () => ({
+  SquareSizeContext: jest.requireActual('react').createContext(40),
   SQUARE_SIZE: 40,
   toSquare: jest.fn(),
   toCoordinates: (square: string, orientation: string) => ({
@@ -61,6 +67,7 @@ jest.mock('../components/Background', () => 'Background');
 jest.mock('../components/Piece', () => 'Piece');
 jest.mock('../components/PromotionModal', () => 'PromotionModal');
 jest.mock('../components/SquareHighlights', () => 'SquareHighlights');
+jest.mock('../components/BoardAnnotations', () => 'BoardAnnotations');
 
 let renderer: ReactTestRenderer;
 

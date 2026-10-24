@@ -8,23 +8,24 @@ type PromotionStore = {
   closeModal: (selection: PieceSymbol) => void;
   cancelModal: () => void;
 };
-export const usePromotionStore = create<PromotionStore>()((set, get) => ({
-  modalOpen: false,
-  modalResolver: null,
-  openModal: () =>
-    new Promise((resolve) => {
-      set({ modalOpen: true, modalResolver: resolve });
-    }),
-  closeModal: (selection) => {
-    const resolver = get().modalResolver;
-    if (resolver) {
-      resolver(selection);
+export const createPromotionStore = () =>
+  create<PromotionStore>()((set, get) => ({
+    modalOpen: false,
+    modalResolver: null,
+    openModal: () =>
+      new Promise((resolve) => {
+        set({ modalOpen: true, modalResolver: resolve });
+      }),
+    closeModal: (selection) => {
+      const resolver = get().modalResolver;
+      if (resolver) {
+        resolver(selection);
+        set({ modalOpen: false, modalResolver: null });
+      }
+    },
+    cancelModal: () => {
+      const resolver = get().modalResolver;
       set({ modalOpen: false, modalResolver: null });
-    }
-  },
-  cancelModal: () => {
-    const resolver = get().modalResolver;
-    set({ modalOpen: false, modalResolver: null });
-    resolver?.(undefined);
-  },
-}));
+      resolver?.(undefined);
+    },
+  }));

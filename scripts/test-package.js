@@ -10,8 +10,10 @@ const Metro = require('metro');
 
 const root = path.resolve(__dirname, '..');
 const manifest = require('../package.json');
-const temporary = fs.mkdtempSync(
-  path.join(os.tmpdir(), 'rn-chessboard-package-')
+// Metro resolves modules through real paths; macOS's /var alias must match
+// projectRoot/watchFolders when building the isolated consumer.
+const temporary = fs.realpathSync(
+  fs.mkdtempSync(path.join(os.tmpdir(), 'rn-chessboard-package-'))
 );
 const consumer = path.join(temporary, 'consumer');
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -109,10 +111,18 @@ async function main() {
   fs.writeFileSync(
     path.join(consumer, 'App.tsx'),
     `import { createRef, type ComponentRef } from 'react';
-import ChessBoard, { ChessBoardHistory, type ChessBoardProps, type ChessBoardRef, type ChessBoardHistoryState, type ChessBoardHistoryMove, type ChessBoardSeekOptions } from 'rn-chessboard';
+import ChessBoard, { ChessBoardHistory, type ChessBoardProps, type ChessBoardRef, type ChessBoardHistoryState, type ChessBoardHistoryMove, type ChessBoardSeekOptions, type ChessBoardMove, type PlayMoveResult, type PlayMoveOptions, type PositionChangeEvent, type PositionChangeSource, type SquareHighlight, type BoardArrow, type MovableColor, type MoveAttemptHandler, type PromotionPiece } from 'rn-chessboard';
 const ref = createRef<ChessBoardRef>();
 const inferredRef = createRef<ComponentRef<typeof ChessBoard>>();
 const props: ChessBoardProps = {
+  initialFen: '7k/P7/8/8/8/8/8/7K w - - 0 23',
+  interactionEnabled: false,
+  movableColor: 'b',
+  size: 240,
+  highlightedSquares: [{ square: 'e4', color: 'green' }],
+  arrows: [{ from: 'e2', to: 'e4', color: 'green' }],
+  onMoveAttempt: (move, position) => move.from === 'e2' && position.fen.length > 0,
+  onPositionChange: (event: PositionChangeEvent) => { const source: PositionChangeSource = event.source; console.log(event.fen, source); },
   initialOrientation: 'w',
   onMove: move => { console.log(move.san); },
   onHistoryChange: (history: ChessBoardHistoryState) => {
@@ -121,6 +131,20 @@ const props: ChessBoardProps = {
   },
 };
 ref.current?.setOrientation('b');
+ref.current?.loadFen('7k/P7/8/8/8/8/8/7K w - - 0 23');
+const promotion: PromotionPiece = 'n';
+const move: ChessBoardMove = { from: 'a7', to: 'a8', promotion };
+const playOptions: PlayMoveOptions = { animated: true, duration: 250 };
+const played: Promise<PlayMoveResult> | undefined = ref.current?.playMove(move, playOptions);
+ref.current?.playMove('a7a8q', { animated: false });
+const fen: string | undefined = ref.current?.getFen();
+const highlights: readonly SquareHighlight[] = props.highlightedSquares!;
+const arrows: readonly BoardArrow[] = props.arrows!;
+const color: MovableColor = 'both';
+const attempt: MoveAttemptHandler = props.onMoveAttempt!;
+console.log(played, fen, highlights, arrows, color, attempt);
+// @ts-expect-error Promotion cannot be a king.
+ref.current?.playMove({ from: 'a7', to: 'a8', promotion: 'k' });
 inferredRef.current?.setOrientation('w');
 const accepted: boolean | undefined = ref.current?.goBack();
 const undone: boolean | undefined = ref.current?.undo();

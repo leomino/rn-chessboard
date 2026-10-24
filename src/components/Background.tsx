@@ -1,8 +1,7 @@
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { type Square } from 'chess.js';
-import { useChessStore } from '../store/chessStore';
-import { SQUARE_SIZE } from '../Constants';
+import { useChessStore } from '../store/BoardContext';
 
 const Background = memo(() => {
   const orientation = useChessStore((state) => state.orientation);
@@ -77,8 +76,6 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'column-reverse',
     justifyContent: 'space-between',
-    width: SQUARE_SIZE,
-    height: SQUARE_SIZE,
     aspectRatio: 1,
   },
   lightSquare: {

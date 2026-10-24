@@ -28,13 +28,14 @@ export type ChessBoardHistoryState = {
   /** Total recorded half-moves, including moves ahead of the cursor. */
   length: number;
   moves: readonly ChessBoardHistoryMove[];
-  /** Seeking may interrupt playback, but not a piece drag or pending move. */
+  /** Seeking may interrupt history playback, but not a drag, promotion, or programmatic animation. */
   canSeek: boolean;
   /** The latest recorded half-move can be permanently removed. */
   canUndo: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   isReviewing: boolean;
+  /** A history or programmatic move transition is active. */
   isAnimating: boolean;
 };
 

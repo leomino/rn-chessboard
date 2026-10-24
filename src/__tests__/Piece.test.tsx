@@ -12,11 +12,16 @@ import {
 } from 'react-native-reanimated';
 import Piece from '../components/Piece';
 import { pieces, SQUARE_SIZE, toCoordinates } from '../Constants';
-import { useChessStore } from '../store/chessStore';
+import { useChessStore } from '../__fixtures__/store';
 import {
   retargetPieceAnimations,
   type PieceAnimations,
 } from '../utils/historyAnimation';
+
+jest.mock('../store/BoardContext', () => ({
+  useChessStore: (selector: unknown) =>
+    require('../__fixtures__/store').useChessStore(selector),
+}));
 
 jest.mock('react-native', () => ({
   Dimensions: { get: () => ({ width: 320 }) },
