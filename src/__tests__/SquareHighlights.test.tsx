@@ -3,7 +3,12 @@ import { Chess, type Color, type Square } from 'chess.js';
 import { View } from 'react-native';
 import SquareHighlights from '../components/SquareHighlights';
 import { toCoordinates } from '../Constants';
-import { useChessStore } from '../store/chessStore';
+import { useChessStore } from '../__fixtures__/store';
+
+jest.mock('../store/BoardContext', () => ({
+  useChessStore: (selector: unknown) =>
+    require('../__fixtures__/store').useChessStore(selector),
+}));
 
 jest.mock('react-native', () => ({
   Dimensions: { get: () => ({ width: 320 }) },
@@ -45,7 +50,7 @@ it.each<Color>(['w', 'b'])(
       expect(views).toHaveLength(2);
       for (const [index, square] of [from, to].entries()) {
         const { x, y } = toCoordinates(square, orientation);
-        expect(views[index]!.props.style[1].transform).toEqual([
+        expect(views[index]!.props.style[2].transform).toEqual([
           { translateX: x },
           { translateY: y },
         ]);

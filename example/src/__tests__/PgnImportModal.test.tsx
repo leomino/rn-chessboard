@@ -1,7 +1,9 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { Button, TextInput } from 'react-native';
 import PgnImportModal from '../PgnImportModal';
-import { useChessStore } from '../../../src/store/chessStore';
+import { createChessStore } from '../../../src/store/chessStore';
+
+const useChessStore = createChessStore();
 
 jest.mock('react-native', () => ({
   StyleSheet: { create: (styles: unknown) => styles },

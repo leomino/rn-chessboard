@@ -10,8 +10,9 @@ import Animated, {
 import { memo, useMemo } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image, StyleSheet } from 'react-native';
-import { canPlay, useChessStore } from '../store/chessStore';
-import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '../Constants';
+import { canPlay } from '../store/chessStore';
+import { useChessStore } from '../store/BoardContext';
+import { pieces, useSquareSize, toCoordinates, toSquare } from '../Constants';
 import type { PieceTransition } from '../utils/history';
 import type { HistoryAnimation } from '../hooks/useHistoryAnimation';
 import { samplePieceAnimation } from '../utils/historyAnimation';
@@ -28,6 +29,7 @@ type PieceProps = {
 };
 
 const Piece = ({ square, type, color, playback }: PieceProps) => {
+  const squareSize = useSquareSize();
   // Playback is driven by shared values, not board subscriptions. In particular,
   // don't rebuild every piece's gestures on each history cursor revision.
   const chess = useChessStore((state) => (playback ? null : state.chess));
@@ -38,35 +40,43 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
   );
   const beginDrag = useChessStore((state) => state.beginDrag);
   const endDrag = useChessStore((state) => state.endDrag);
-  const coordinates = toCoordinates(square, orientation);
+  const coordinates = toCoordinates(square, orientation, squareSize);
   const origin = toCoordinates(
     playback?.piece.from?.square ?? square,
-    orientation
+    orientation,
+    squareSize
   );
   const target = toCoordinates(
     playback?.piece.to?.square ?? square,
-    orientation
+    orientation,
+    squareSize
   );
   const displayType = playback?.piece.from?.type ?? type;
 
   const panGestureActive = useSharedValue(false);
-  const gesturePosition = useSharedValue({ revision, orientation });
+  const gesturePosition = useSharedValue({ revision, orientation, squareSize });
   const position = useSharedValue(coordinates);
   const pointerOffset = useSharedValue({ x: 0, y: 0 });
 
   useAnimatedReaction(
-    () => ({ square, orientation, revision }),
+    () => ({ square, orientation, revision, squareSize }),
     (current, previous) => {
       if (
         current.square !== previous?.square ||
         current.orientation !== previous?.orientation ||
-        current.revision !== previous?.revision
+        current.revision !== previous?.revision ||
+        current.squareSize !== previous?.squareSize
       ) {
         gesturePosition.value = {
           revision: current.revision,
           orientation: current.orientation,
+          squareSize: current.squareSize,
         };
-        position.value = toCoordinates(current.square, current.orientation);
+        position.value = toCoordinates(
+          current.square,
+          current.orientation,
+          current.squareSize
+        );
         pointerOffset.value = { x: 0, y: 0 };
         panGestureActive.value = false;
       }
@@ -77,6 +87,7 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
     'worklet';
     return (
       gesturePosition.value.revision === revision &&
+      gesturePosition.value.squareSize === squareSize &&
       gesturePosition.value.orientation === orientation
     );
   };
@@ -88,12 +99,14 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
     return toCoordinates(
       toSquare(
         {
-          x: position.value.x + pointerOffset.value.x + SQUARE_SIZE / 2,
-          y: position.value.y + pointerOffset.value.y + SQUARE_SIZE,
+          x: position.value.x + pointerOffset.value.x + squareSize / 2,
+          y: position.value.y + pointerOffset.value.y + squareSize,
         },
-        orientation
+        orientation,
+        squareSize
       ),
-      orientation
+      orientation,
+      squareSize
     );
   });
 
@@ -120,8 +133,8 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
       position.value = coordinates;
       panGestureActive.value = true;
       pointerOffset.value = {
-        x: x - SQUARE_SIZE / 2,
-        y: y - SQUARE_SIZE,
+        x: x - squareSize / 2,
+        y: y - squareSize,
       };
     })
     .onChange(({ translationX, translationY }) => {
@@ -139,15 +152,16 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
             coordinates.x +
             translationX +
             pointerOffset.value.x +
-            SQUARE_SIZE / 2,
-          y: coordinates.y + translationY + pointerOffset.value.y + SQUARE_SIZE,
+            squareSize / 2,
+          y: coordinates.y + translationY + pointerOffset.value.y + squareSize,
         },
-        orientation
+        orientation,
+        squareSize
       );
       // Finish the visual drop on the UI thread before scheduling the move.
       panGestureActive.value = false;
       if (destinations.includes(destination)) {
-        position.value = toCoordinates(destination, orientation);
+        position.value = toCoordinates(destination, orientation, squareSize);
         pointerOffset.value = { x: 0, y: 0 };
       } else {
         position.value = withTiming(coordinates, { duration: 100 });
@@ -225,7 +239,13 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
   return (
     <>
       <GestureDetector gesture={pan}>
-        <Animated.View style={[animatedStyles, styles.piece]}>
+        <Animated.View
+          style={[
+            animatedStyles,
+            styles.piece,
+            { width: squareSize, height: squareSize },
+          ]}
+        >
           <Image
             style={styles.pieceSymbol}
             source={pieces[`${displayType}${color}`]}
@@ -234,7 +254,11 @@ const Piece = ({ square, type, color, playback }: PieceProps) => {
       </GestureDetector>
       <Animated.View
         pointerEvents={'none'}
-        style={[focusedSquareStyles, styles.focusedSquare]}
+        style={[
+          focusedSquareStyles,
+          styles.focusedSquare,
+          { width: squareSize },
+        ]}
       />
     </>
   );
@@ -244,8 +268,6 @@ const styles = StyleSheet.create({
   piece: {
     position: 'absolute',
     transformOrigin: 'bottom',
-    width: SQUARE_SIZE,
-    height: SQUARE_SIZE,
   },
   pieceSymbol: {
     width: '100%',
@@ -253,7 +275,6 @@ const styles = StyleSheet.create({
   },
   focusedSquare: {
     position: 'absolute',
-    width: SQUARE_SIZE,
     aspectRatio: 1,
     borderRadius: 100,
     zIndex: 3,

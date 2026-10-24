@@ -44,6 +44,12 @@ and game viewers for iOS and Android.
 
 - **TypeScript API** — exported component, ref, and history types, plus `onMove`
   and `onHistoryChange` callbacks for connecting your own controls and feedback.
+- **External control** — load FEN positions, await animated UCI moves, intercept
+  user attempts, restrict interaction, and observe position changes.
+- **Independent boards** — each mounted board owns its game, history, gestures,
+  promotion chooser, orientation, and animation lifecycle.
+- **Hints and layouts** — declarative square highlights and arrows, responsive
+  parent-based sizing, and an optional explicit size.
 - **[Optional haptics](#optional-haptics)** — connect your preferred haptics library
   to move and history-selection callbacks.
 - **Expo and React Native CLI support** — documented setup for both workflows
@@ -147,8 +153,16 @@ TypeScript consumers. All board props are optional.
 | Prop | Type | Description |
 | --- | --- | --- |
 | `initialOrientation` | `'w' \| 'b'` | White faces the player by default. Also updates orientation when this prop changes. |
-| `onMove` | `(move: Move) => void` | Called after a completed move, including promotion. `Move` is the chess.js move object, with `san`, `from`, `to`, and `isCapture()`. |
+| `initialFen` | `string` | Full six-field FEN used only on mount. Defaults to the standard position. Invalid initial input throws during rendering. |
+| `interactionEnabled` | `boolean` | Defaults to `true`. Disables drag, tap-to-move, and promotion input when false. |
+| `movableColor` | `'w' \| 'b' \| 'both'` | Restricts manual play; defaults to `'both'`. Chess turn rules still apply. |
+| `onMoveAttempt` | `MoveAttemptHandler` | Synchronous approval of a legal user move before commit; return `false` to reject. |
+| `onMove` | `(move: Move) => void` | Called once after an accepted **user** move, including promotion. Unchanged for existing consumers. `Move` is the chess.js move object, with `san`, `from`, `to`, and `isCapture()`. |
+| `onPositionChange` | `(event: PositionChangeEvent) => void` | Reports resulting FEN, source, and optional move at logical commit time. |
 | `onHistoryChange` | `(state: ChessBoardHistoryState) => void` | Receives the current history state on mount or callback replacement, then whenever the cursor, timeline length, or navigation availability changes. |
+| `highlightedSquares` | `readonly SquareHighlight[]` | Custom `{ square, color }` overlays. |
+| `arrows` | `readonly BoardArrow[]` | Custom `{ from, to, color }` arrows. |
+| `size` | `number` | Positive finite width/height in logical pixels. Otherwise uses parent width, up to 576 px. |
 
 #### Ref methods
 
@@ -163,7 +177,217 @@ Call these methods through a `useRef<ChessBoardRef>(null)` attached to the board
 | `undo()` | Permanently removes the last recorded half-move and animates to the new latest position. Returns `true` if accepted. |
 | `reset()` | Immediately clears the game and history and restores the standard starting position. Preserves orientation. |
 | `loadPgn(pgn)` | Replaces the game and history with a single PGN, showing its final position. Throws on empty or invalid input, leaving the current game intact. |
+| `loadFen(fen)` | Replaces the position and clears history. Throws on invalid input, leaving the entire existing game and animation intact. Preserves orientation. |
+| `getFen()` | Returns the full six-field FEN at the current logical history cursor, including the en passant target and counters. |
+| `playMove(move, options?)` | Returns `Promise<PlayMoveResult>`. Accepts lowercase UCI or `{ from, to, promotion? }`. Defaults to animated, 200 ms. |
 | `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
+
+### FEN positions and programmatic moves
+
+```tsx
+import { useRef } from 'react';
+import { Button, View } from 'react-native';
+import ChessBoard, { type ChessBoardRef } from 'rn-chessboard';
+
+const FEN = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+
+export function ControlledBoard() {
+  const board = useRef<ChessBoardRef>(null);
+  const play = async () => {
+    const handle = board.current;
+    if (!handle) return;
+    handle.loadFen(FEN);
+    const first = await handle.playMove('e7e5', { duration: 250 });
+    if (!first.accepted || first.animation !== 'finished' || board.current !== handle) return;
+    const second = await handle.playMove({ from: 'g1', to: 'f3' });
+    console.log(second, handle.getFen());
+  };
+  return (
+    <View>
+      <ChessBoard ref={board} initialFen={FEN} initialOrientation="b" />
+      <Button title="Load and play" onPress={play} />
+    </View>
+  );
+}
+```
+
+`initialFen` is an initializer, not a controlled prop: subsequent changes are
+ignored. Use `loadFen()` to switch positions in a mounted board, or change its
+React `key` to create a fresh board. Each load establishes a new timeline origin
+at index 0 and cancels selections, drags, promotion requests, and animations.
+Side to move, castling rights, en passant, halfmove clock, and fullmove number are
+preserved. Validation uses chess.js; incomplete FEN strings are rejected.
+
+Programmatic moves use chess.js and the existing Reanimated transition system,
+including castling, capture fades, en passant, and promotions. Specify promotions
+explicitly (`'a7a8q'`, `'a7a8n'`, or `{ from: 'a7', to: 'a8', promotion: 'r' }`);
+programmatic promotion never opens the chooser. Moves respect the side to move
+and may be played only at the latest history position.
+
+```ts
+type PlayMoveResult =
+  | { accepted: true; move: Move; animation: 'finished' | 'cancelled' }
+  | { accepted: false; reason: 'illegal' | 'invalid' | 'busy' | 'reviewing' | 'unmounted' };
+```
+
+`Move` above is the chess.js type. `ChessBoardMove`, `PromotionPiece`,
+`PlayMoveOptions`, and `PlayMoveResult` are exported from `rn-chessboard`.
+
+**Completion and competing commands:**
+
+- Logical state, history, `getFen()`, and position events update immediately when
+  a move is accepted. The promise resolves after the UI-thread animation completes.
+  `{ animated: false }` commits immediately and resolves with `'finished'`.
+- Await each move and check its result before playing the next. There is no queue:
+  a competing move during animation, dragging, or promotion returns `'busy'`.
+  Back/forward/seek/undo also return `false` during a programmatic animation.
+- `loadFen`, `loadPgn`, `reset`, and unmount cancel outstanding animations and
+  resolve accepted moves with `animation: 'cancelled'`. The accepted move was
+  already committed; cancellation is not a rollback. Invalid loads cancel nothing.
+- Rotation settles the accepted move at its target and resolves `'finished'`.
+  Resizing retargets playback to the new geometry and clears pending user input.
+- History-to-history seeking retains its existing interruptible behavior.
+- `duration` must be finite and nonnegative. Malformed UCI/options return
+  `'invalid'`; a well-formed illegal move returns `'illegal'`. Expected move
+  failures resolve as results rather than throwing. FEN/PGN loading throws.
+- Old completion callbacks cannot overwrite a replacement position. A retained
+  handle's `playMove()` returns `'unmounted'` after its board unmounts.
+
+### User interaction and move approval
+
+```tsx
+<ChessBoard
+  interactionEnabled={true}
+  movableColor="w"
+  onMoveAttempt={(move, position) => {
+    console.log(position.fen, move.from, move.to, move.promotion);
+    return move.from === 'e2' && move.to === 'e4';
+  }}
+/>
+```
+
+`MoveAttemptHandler` receives a read-only `ChessBoardMove` and `{ fen: string }`
+containing the **pre-move** position. It runs once for a legal manual attempt,
+after any promotion selection, before the live game/history is committed.
+Returning `false` or throwing rejects the move, clears selection, and returns a
+dragged piece to its origin. Illegal gestures never reach the callback. Returning
+`true` accepts. Approval is synchronous; do not return a promise.
+
+Changing `interactionEnabled` or `movableColor` clears pending user input,
+including promotion. Re-enabling interaction takes effect reactively.
+Programmatic moves bypass both interaction restrictions and `onMoveAttempt`.
+History remains usable when manual interaction is disabled.
+
+### Position events
+
+`PositionChangeEvent` is `{ fen, source, move? }`, where `source` is:
+
+| Source | When emitted |
+| --- | --- |
+| `'user'` | Accepted manual move; includes the chess.js `move`. |
+| `'programmatic'` | Accepted `playMove`; includes `move`. |
+| `'history'` | Back/forward/seek changes the history cursor. |
+| `'load'` | Successful FEN or PGN replacement, even if the resulting FEN is identical. |
+| `'undo'` | Successful permanent removal of the last recorded move. |
+| `'reset'` | Standard starting position is restored. |
+
+Events fire once at logical commit, not again when animation finishes. They do
+not fire on mount, callback replacement, orientation changes, same-index seeks,
+rejected moves, invalid loads, or after unmount. Read the initial position using
+`getFen()` or your initial FEN. The event FEN always describes its commit, even
+if a host callback immediately issues another command.
+
+`onMove` remains user-only; use `onPositionChange` to observe automatic moves and
+position replacement. `onHistoryChange` also reports navigation-lock and animation
+changes, so one operation can produce multiple history-state notifications.
+Notifications are delivered in commit order, including reentrant host commands.
+Exceptions in notification callbacks are logged without undoing a committed move.
+
+### Independent boards, hints, and sizing
+
+```tsx
+<View style={{ flexDirection: 'row' }}>
+  <View style={{ flex: 1 }}>
+    <ChessBoard
+      initialOrientation="w"
+      highlightedSquares={[{ square: 'e4', color: 'rgba(34,197,94,0.4)' }]}
+      arrows={[{ from: 'g1', to: 'f3', color: '#22c55e' }]}
+    />
+  </View>
+  <View style={{ flex: 1 }}>
+    <ChessBoard initialOrientation="b" interactionEnabled={false} />
+  </View>
+</View>
+```
+
+Boards share no mutable game or interaction state. Unmounting one cannot affect
+another; remounting creates a fresh game. Attach a separate ref to each board.
+
+Highlights render above backgrounds, below built-in last-move/selection overlays
+and pieces. Legal-destination indicators retain their existing layer. Use
+translucent colors when combining overlays; later custom highlights win on the
+same square. Check indicators can be supplied as custom highlighted squares.
+Arrows render above pieces and highlights, ignore touches, and scale with the
+board. Same-square arrows are omitted. Both overlay props update reactively and
+follow orientation; no additional rendering dependency is required.
+
+The board measures its parent width, stays square, and defaults to a maximum of
+576 logical pixels (the previous maximum). Window width is only a reactive
+fallback before layout. Set `size={240}` for an explicit square; ensure it fits
+your parent. Geometry, gestures, sprites, promotions, and overlays use the same
+per-board square size. The board now occupies its square's height rather than
+claiming all remaining vertical space; wrap it in a flex container if needed.
+
+### External training controller
+
+Keep solution logic in the consuming app. This minimal controller accepts Black's
+expected move, plays White's reply, and invalidates asynchronous continuation when
+retrying or unmounting:
+
+```tsx
+import { useEffect, useRef } from 'react';
+import { Button, View } from 'react-native';
+import ChessBoard, { type ChessBoardRef } from 'rn-chessboard';
+
+const START = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+
+export function TrainingPosition() {
+  const board = useRef<ChessBoardRef>(null);
+  const generation = useRef(0);
+  const answered = useRef(false);
+  useEffect(() => () => { generation.current++; }, []);
+
+  const respond = async () => {
+    const version = generation.current;
+    const handle = board.current;
+    if (!handle) return;
+    const result = await handle.playMove('g1f3');
+    if (version !== generation.current || board.current !== handle) return;
+    if (result.accepted && result.animation === 'finished') console.log('Complete');
+  };
+
+  return <View>
+    <ChessBoard
+      ref={board} initialFen={START} initialOrientation="b" movableColor="b"
+      onMoveAttempt={(move) => !answered.current && move.from + move.to === 'e7e5'}
+      onPositionChange={(event) => {
+        if (event.source === 'user') {
+          answered.current = true;
+          respond();
+        }
+      }}
+    />
+    <Button title="Retry" onPress={() => {
+      generation.current++;
+      answered.current = false;
+      board.current?.loadFen(START);
+    }} />
+  </View>;
+}
+```
+
+The [example training section](./example/src/TrainingDemo.tsx) adds feedback,
+highlights, and arrows alongside a separately controlled board.
 
 ### Animated history navigation
 
@@ -211,11 +435,11 @@ Each step is one half-move (one player's move). The history state contains:
 | `index` | Applied half-moves; `0` is the initial position. |
 | `length` | Total recorded half-moves, including those ahead of the cursor. |
 | `moves` | Stable, read-only list of `{ index, san, moveNumber, color }` entries, including future moves. |
-| `canSeek` | Direct seeking is allowed; false during a piece drag or pending move/promotion. |
-| `canUndo` | There is a recorded move to undo and no piece drag or pending move/promotion. |
+| `canSeek` | Direct seeking is allowed; false during a piece drag, pending move/promotion, or programmatic move animation. |
+| `canUndo` | There is a recorded move to undo and no piece drag, pending move/promotion, or programmatic move animation. |
 | `canGoBack`, `canGoForward` | Whether that action is currently available. |
 | `isReviewing` | The displayed position is earlier than the latest position. |
-| `isAnimating` | A history transition is in progress. |
+| `isAnimating` | A history or programmatic move transition is in progress. |
 
 #### Navigation behavior
 
@@ -231,7 +455,7 @@ indices return `false`. The initial position is index `0`.
 
 Earlier positions are read-only: return to the latest position to continue play.
 The complete timeline is preserved while browsing. `onMove` fires for newly
-played moves; use `onHistoryChange` to respond to navigation.
+played user moves; use `onHistoryChange` or `onPositionChange` for navigation.
 
 #### Undo and reset
 
@@ -242,6 +466,9 @@ move. Undo can interrupt playback, but returns `false` for an empty game or whil
 dragging/choosing a promotion.
 
 `reset()` also cancels playback, drags, square selection, and pending promotion.
+It always restores the standard chess starting position, including when the board
+started from a custom FEN. Use `loadFen(originalFen)` to retry that position, or
+`seekTo(0)` to review it while preserving the timeline.
 Both operations notify `onHistoryChange` without firing `onMove`. The
 [example app](#example-app) includes **Undo** and **Reset** buttons.
 
@@ -375,6 +602,9 @@ immediately without a delayed queue; very rapid impacts may merge on the device.
 
 The [Expo example app](./example/src/App.tsx) includes interactive play, board
 flipping, PGN import, the history seeker, undo/reset controls, and iOS haptics.
+Its **Programmatic control** section demonstrates FEN loading, animated moves,
+interaction toggling, and current-FEN display. The simultaneous **Training demo**
+board rejects unexpected answers and automatically plays a reply.
 
 Follow the [development setup](./CONTRIBUTING.md#development-workflow), then run
 one of these commands from the repository root:
@@ -389,11 +619,18 @@ yarn example android
 
 The package is a work in progress.
 
-- **One board per app:** board instances share game state; independent games are
-  not yet supported.
-- **Window-based sizing:** board dimensions are calculated from the window width
-  when the module loads. Custom sizing is not yet supported.
 - **Web is experimental:** iOS and Android are the primary targets.
+- Earlier history positions remain read-only; branching analysis is not supported.
+- Approval is synchronous; commands are not queued.
+
+### Compatibility notes
+
+Existing ref methods and manual `onMove` semantics are preserved. Boards no longer
+share games or retain them across unmount/remount. Persist positions/history in
+your app if you need to restore a screen. Sizing now follows the parent; see the
+layout notes above. React Native, Expo, Gesture Handler, and Reanimated supported
+versions are unchanged. The chess.js minimum is now 1.4.0 (already used by the
+repository lockfile) for full en passant FEN serialization.
 
 ## Roadmap
 

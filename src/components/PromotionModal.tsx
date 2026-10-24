@@ -1,29 +1,35 @@
 import { memo } from 'react';
 import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useChessStore } from '../store/chessStore';
-import { usePromotionStore } from '../store/promotionStore';
-import { pieces, SQUARE_SIZE } from '../Constants';
+import { useChessStore, usePromotionStore } from '../store/BoardContext';
+import { pieces, useSquareSize } from '../Constants';
 
 const PromotionModal = memo(() => {
+  const squareSize = useSquareSize();
   const chess = useChessStore((state) => state.chess);
   const modalOpen = usePromotionStore((state) => state.modalOpen);
   const closeModal = usePromotionStore((state) => state.closeModal);
+  const cancelModal = usePromotionStore((state) => state.cancelModal);
 
   if (!modalOpen) return null;
 
   return (
-    <Modal animationType="none" transparent={true} visible={modalOpen}>
+    <Modal
+      animationType="none"
+      transparent={true}
+      visible={modalOpen}
+      onRequestClose={cancelModal}
+    >
       <View style={styles.main}>
         <View style={styles.row}>
           <Pressable onPress={() => closeModal('q')}>
             <Image
-              style={{ width: SQUARE_SIZE, height: SQUARE_SIZE }}
+              style={{ width: squareSize, height: squareSize }}
               source={pieces[`q${chess.turn()}`]}
             />
           </Pressable>
           <Pressable onPress={() => closeModal('n')}>
             <Image
-              style={{ width: SQUARE_SIZE, height: SQUARE_SIZE }}
+              style={{ width: squareSize, height: squareSize }}
               source={pieces[`n${chess.turn()}`]}
             />
           </Pressable>
@@ -32,13 +38,13 @@ const PromotionModal = memo(() => {
         <View style={styles.row}>
           <Pressable onPress={() => closeModal('b')}>
             <Image
-              style={{ width: SQUARE_SIZE, height: SQUARE_SIZE }}
+              style={{ width: squareSize, height: squareSize }}
               source={pieces[`b${chess.turn()}`]}
             />
           </Pressable>
           <Pressable onPress={() => closeModal('r')}>
             <Image
-              style={{ width: SQUARE_SIZE, height: SQUARE_SIZE }}
+              style={{ width: squareSize, height: squareSize }}
               source={pieces[`r${chess.turn()}`]}
             />
           </Pressable>

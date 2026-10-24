@@ -1,14 +1,12 @@
 import { type Color, type PieceSymbol, type Square } from 'chess.js';
 import { clamp } from 'react-native-reanimated';
-import { Dimensions, type ImageSourcePropType } from 'react-native';
-import { createContext } from 'react';
+import { type ImageSourcePropType } from 'react-native';
+import { createContext, useContext } from 'react';
 
 type ChessPiece = `${PieceSymbol}${Color}`;
-export const SQUARE_SIZE = clamp(
-  Math.floor(Dimensions.get('window').width / 8),
-  10,
-  72
-);
+export const SQUARE_SIZE = 40;
+export const SquareSizeContext = createContext(SQUARE_SIZE);
+export const useSquareSize = () => useContext(SquareSizeContext);
 export const pieces: Record<ChessPiece, ImageSourcePropType> = {
   kw: require('./assets/images/kingwhite.png'),
   qw: require('./assets/images/queenwhite.png'),
@@ -24,10 +22,6 @@ export const pieces: Record<ChessPiece, ImageSourcePropType> = {
   rb: require('./assets/images/rookblack.png'),
 };
 
-export const PromotionModalContext = createContext<() => Promise<PieceSymbol>>(
-  () => new Promise<PieceSymbol>(() => {})
-);
-
 export const isValidSquare = (value: string): value is Square => {
   'worklet';
   const regex = /^[a-h][1-8]$/;
@@ -36,11 +30,12 @@ export const isValidSquare = (value: string): value is Square => {
 
 export const toSquare = (
   { x, y }: { x: number; y: number },
-  orientation: Color
+  orientation: Color,
+  squareSize = SQUARE_SIZE
 ): Square => {
   'worklet';
-  const file = clamp(Math.floor(x / SQUARE_SIZE), 0, 7);
-  const rank = clamp(Math.floor(y / SQUARE_SIZE), 0, 7);
+  const file = clamp(Math.floor(x / squareSize), 0, 7);
+  const rank = clamp(Math.floor(y / squareSize), 0, 7);
   const square = `${String.fromCharCode(orientation === 'w' ? 97 + file : 104 - file)}${orientation === 'w' ? 8 - rank : 1 + rank}`;
   if (!isValidSquare(square)) {
     throw new Error('Invalid square after coordinate translation.');
@@ -50,7 +45,8 @@ export const toSquare = (
 
 export const toCoordinates = (
   square: Square,
-  orientation: Color
+  orientation: Color,
+  squareSize = SQUARE_SIZE
 ): { x: number; y: number } => {
   'worklet';
   const fileIndex =
@@ -59,7 +55,7 @@ export const toCoordinates = (
       : 104 - square.charCodeAt(0);
   const rankIndex =
     orientation === 'w' ? 8 - +square.charAt(1) : +square.charAt(1) - 1;
-  const x = clamp(fileIndex * SQUARE_SIZE, 0, SQUARE_SIZE * 8);
-  const y = clamp(rankIndex * SQUARE_SIZE, 0, SQUARE_SIZE * 8);
+  const x = clamp(fileIndex * squareSize, 0, squareSize * 8);
+  const y = clamp(rankIndex * squareSize, 0, squareSize * 8);
   return { x, y };
 };

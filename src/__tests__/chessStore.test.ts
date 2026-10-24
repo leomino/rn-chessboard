@@ -1,6 +1,5 @@
 import { Chess } from 'chess.js';
-import { useChessStore } from '../store/chessStore';
-import { usePromotionStore } from '../store/promotionStore';
+import { useChessStore, usePromotionStore } from '../__fixtures__/store';
 
 beforeEach(() => {
   useChessStore.setState({
