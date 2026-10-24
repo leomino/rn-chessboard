@@ -5,14 +5,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "plugins": [
       [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#f2f2f7",
+          "dark": {
+            "backgroundColor": "#121212"
+          }
         }
       ]
     ],

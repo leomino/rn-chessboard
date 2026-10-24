@@ -1,25 +1,53 @@
 # React Native Chessboard
 
-A lightweight and customizable chessboard component for React Native. Ideal for building chess applications, training tools, or integrating chess features into your mobile app.
+An interactive chessboard for React Native with drag-and-drop play, legal move
+validation, PGN import, and animated game review. Build chess apps, training tools,
+and game viewers for iOS and Android.
+
 <div align="center" markdown="1">
-  <img src="https://raw.githubusercontent.com/leomino/rn-chessboard/main/media/chessboard-preview.gif" alt="preview">
+  <img src="https://raw.githubusercontent.com/leomino/rn-chessboard/main/media/chessboard-preview.gif" alt="React Native Chessboard preview">
 </div>
+
+[Installation](#installation) · [Usage](#usage) · [API reference](#props-and-ref) ·
+[Example app](#example-app) · [Current limitations](#current-limitations)
 
 ## Features
 
-- Interactive chessboard with drag-and-drop, as well as tap to move
-- Board rotation at any given time
-- Move highlighting (e.g. last moves, legal moves...)
-- Piece Promotion, Castling and every other legal chess move
-- Animated move-history navigation with backward and forward controls
+### Play and interact
 
-## Coming soon
+- **Drag-and-drop and tap-to-move** — move pieces with either gesture, with an
+  enlarged piece and destination-square feedback while dragging.
+- **Legal move validation** — powered by [chess.js](https://github.com/jhlywa/chess.js),
+  including castling, en passant, and pawn promotion.
+- **Built-in promotion chooser** — promote to a queen, rook, bishop, or knight.
+- **Move highlighting** — see the selected square, legal destinations, and the
+  last move's origin and destination.
+- **White or Black orientation** — flip the board during play or review without
+  resetting the game.
 
-- load games from pgn's
-- Customizable board and pieces
+### Review and replay
 
-## Disclaimer
-This package is a work in progress, use it with caution.
+- **[Animated history navigation](#animated-history-navigation)** — step backward
+  or forward, or jump directly to any recorded position with `seekTo()`.
+- **[Scrollable move history](#horizontal-history-seeker)** — use the optional
+  `ChessBoardHistory` component to tap moves, drag to scrub through a game, or
+  navigate with previous/next controls.
+- **[PGN import](#importing-pgn-games)** — load a game's main line into the timeline,
+  including games with custom starting positions specified by `SetUp`/`FEN` headers.
+- **[Undo and reset](#undo-and-reset)** — take back the last half-move and continue
+  playing, or start a fresh game while keeping the board orientation.
+- **UI-thread playback animations** — Reanimated-powered transitions handle
+  castling, captured-piece fades, en passant, and promotion in both directions,
+  with support for system reduced-motion preferences.
+
+### Integrate with your app
+
+- **TypeScript API** — exported component, ref, and history types, plus `onMove`
+  and `onHistoryChange` callbacks for connecting your own controls and feedback.
+- **[Optional haptics](#optional-haptics)** — connect your preferred haptics library
+  to move and history-selection callbacks.
+- **Expo and React Native CLI support** — documented setup for both workflows
+  using the New Architecture.
 
 ## Installation
 
@@ -80,6 +108,10 @@ or `npx expo run:android` after installing native dependencies.
 
 ## Usage
 
+After completing the native dependency setup, render the board inside a
+`GestureHandlerRootView`. A new game starts in the standard position with White
+to move.
+
 ```tsx
 import { useRef } from 'react';
 import { Button, View } from 'react-native';
@@ -97,7 +129,10 @@ export default function App() {
           initialOrientation="w"
           onMove={(move) => console.log(move.san)}
         />
-        <Button title="Show Black's side" onPress={() => board.current?.setOrientation('b')} />
+        <Button
+          title="Show Black's side"
+          onPress={() => board.current?.setOrientation('b')}
+        />
       </View>
     </GestureHandlerRootView>
   );
@@ -106,7 +141,8 @@ export default function App() {
 
 ### Props and ref
 
-`ChessBoardProps`, `ChessBoardRef`, and `ChessBoardHistoryState` are exported for TypeScript consumers.
+`ChessBoardProps`, `ChessBoardRef`, and `ChessBoardHistoryState` are exported for
+TypeScript consumers. All board props are optional.
 
 | Prop | Type | Description |
 | --- | --- | --- |
@@ -114,10 +150,20 @@ export default function App() {
 | `onMove` | `(move: Move) => void` | Called after a completed move, including promotion. `Move` is the chess.js move object, with `san`, `from`, `to`, and `isCapture()`. |
 | `onHistoryChange` | `(state: ChessBoardHistoryState) => void` | Receives the current history state on mount or callback replacement, then whenever the cursor, timeline length, or navigation availability changes. |
 
-`ref.current.setOrientation('w' | 'b')` rotates the board without resetting the game.
-The board currently uses shared game state: mount one board per app. Board dimensions
-are based on the window width at module load; custom sizing and independent games
-are not yet supported. iOS and Android are the primary targets; web is experimental.
+#### Ref methods
+
+Call these methods through a `useRef<ChessBoardRef>(null)` attached to the board:
+
+| Ref method | Result |
+| --- | --- |
+| `setOrientation('w' \| 'b')` | Shows White's or Black's side without resetting the game. |
+| `goBack()` | Starts one animated step backward. Returns `true` if accepted. |
+| `goForward()` | Starts one animated step forward. Returns `true` if accepted. |
+| `seekTo(index, options?)` | Jumps to any recorded position. Animates by default; pass `{ animated: false }` for instant scrubbing. Returns `true` if accepted, including an already-selected position. |
+| `undo()` | Permanently removes the last recorded half-move and animates to the new latest position. Returns `true` if accepted. |
+| `reset()` | Immediately clears the game and history and restores the standard starting position. Preserves orientation. |
+| `loadPgn(pgn)` | Replaces the game and history with a single PGN, showing its final position. Throws on empty or invalid input, leaving the current game intact. |
+| `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
 
 ### Animated history navigation
 
@@ -143,7 +189,9 @@ export default function Game() {
         disabled={!history?.canGoBack}
         onPress={() => board.current?.goBack()}
       />
-      <Text>Position {history?.index ?? 0} / {history?.length ?? 0}</Text>
+      <Text>
+        Position {history?.index ?? 0} / {history?.length ?? 0}
+      </Text>
       <Button
         title="Forward"
         disabled={!history?.canGoForward}
@@ -154,14 +202,7 @@ export default function Game() {
 }
 ```
 
-| Ref method | Result |
-| --- | --- |
-| `goBack()` | Starts one animated step backward. Returns `true` if accepted. |
-| `goForward()` | Starts one animated step forward. Returns `true` if accepted. |
-| `seekTo(index, options?)` | Jumps to any recorded position. Animates by default; pass `{ animated: false }` for instant scrubbing. Returns `true` if accepted, including an already-selected position. |
-| `undo()` | Permanently removes the last recorded half-move and animates to the new latest position. Returns `true` if accepted. |
-| `reset()` | Immediately clears the game and history and restores the standard starting position. Preserves orientation. |
-| `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
+#### History state
 
 Each step is one half-move (one player's move). The history state contains:
 
@@ -175,6 +216,8 @@ Each step is one half-move (one player's move). The history state contains:
 | `canGoBack`, `canGoForward` | Whether that action is currently available. |
 | `isReviewing` | The displayed position is earlier than the latest position. |
 | `isAnimating` | A history transition is in progress. |
+
+#### Navigation behavior
 
 The cursor updates to the target position when a step starts. Navigation becomes
 available again after its animation finishes. Back/forward requests at a boundary, during an
@@ -190,6 +233,8 @@ Earlier positions are read-only: return to the latest position to continue play.
 The complete timeline is preserved while browsing. `onMove` fires for newly
 played moves; use `onHistoryChange` to respond to navigation.
 
+#### Undo and reset
+
 `undo()` removes the latest recorded move even when reviewing an earlier position,
 then returns to the new end of the game. The removed move cannot be replayed with
 `goForward()`; once the undo animation completes, play can continue with a different
@@ -197,8 +242,10 @@ move. Undo can interrupt playback, but returns `false` for an empty game or whil
 dragging/choosing a promotion.
 
 `reset()` also cancels playback, drags, square selection, and pending promotion.
-Both operations notify `onHistoryChange` without firing `onMove`. The example app
-includes **Undo** and **Reset** buttons.
+Both operations notify `onHistoryChange` without firing `onMove`. The
+[example app](#example-app) includes **Undo** and **Reset** buttons.
+
+#### Animation options
 
 Playback defaults to synchronized 200 ms piece animations, including both pieces during
 castling, captured-piece fades, en passant restoration, and promotion reversal.
@@ -209,6 +256,31 @@ the new orientation.
 Pass `seekTo(index, { duration: 80 })` to use a shorter animation (milliseconds).
 Durations below 200 ms use a fast-starting ease-out curve. Negative or non-finite
 durations are rejected for animated seeks. Fades begin immediately in both directions.
+
+### Importing PGN games
+
+In the [example app](#example-app), tap **Import PGN**, paste a game into the text
+field, and tap **Import game**. Invalid input shows an error so you can correct it
+and try again.
+
+For your own import UI, pass the pasted text to the board ref:
+
+```tsx
+try {
+  board.current?.loadPgn(pgnText);
+} catch {
+  // Show a validation error and let the user edit the pasted text.
+}
+```
+
+Import supports PGN headers, comments, annotations, and custom starting positions
+specified by `SetUp`/`FEN` headers. Only the main line is added to the timeline;
+variations are ignored. Paste one game at a time.
+
+Successful imports preserve board orientation, cancel pending interactions and
+animations, and notify `onHistoryChange` without firing `onMove`. Use the history
+seeker or `seekTo(0)` to replay from the starting position. Undo and continued
+play work at the end of the imported game, just as with moves played in the app.
 
 ### Horizontal history seeker
 
@@ -299,6 +371,33 @@ immediately without a delayed queue; very rapid impacts may merge on the device.
 />
 ```
 
+## Example app
+
+The [Expo example app](./example/src/App.tsx) includes interactive play, board
+flipping, PGN import, the history seeker, undo/reset controls, and iOS haptics.
+
+Follow the [development setup](./CONTRIBUTING.md#development-workflow), then run
+one of these commands from the repository root:
+
+```sh
+yarn example ios
+# Or:
+yarn example android
+```
+
+## Current limitations
+
+The package is a work in progress.
+
+- **One board per app:** board instances share game state; independent games are
+  not yet supported.
+- **Window-based sizing:** board dimensions are calculated from the window width
+  when the module loads. Custom sizing is not yet supported.
+- **Web is experimental:** iOS and Android are the primary targets.
+
+## Roadmap
+
+- Customizable board appearance and piece sets.
 
 ## Contributing and license
 

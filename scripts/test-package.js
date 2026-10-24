@@ -125,6 +125,8 @@ inferredRef.current?.setOrientation('w');
 const accepted: boolean | undefined = ref.current?.goBack();
 const undone: boolean | undefined = ref.current?.undo();
 ref.current?.reset();
+ref.current?.loadPgn('1. e4 e5 *');
+inferredRef.current?.loadPgn('1. d4 d5 *');
 inferredRef.current?.goForward();
 const history: ChessBoardHistoryState | undefined = ref.current?.getHistoryState();
 console.log(accepted, undone, history, history?.canUndo);
@@ -134,6 +136,8 @@ const moves: readonly ChessBoardHistoryMove[] = history?.moves ?? [];
 console.log(sought, moves, history?.canSeek);
 // @ts-expect-error Navigation takes no arguments.
 ref.current?.goForward(1);
+// @ts-expect-error PGN import requires text.
+ref.current?.loadPgn(123);
 // @ts-expect-error Only chess.js colors are valid orientations.
 ref.current?.setOrientation('invalid');
 // @ts-expect-error Invalid ref handles must be rejected.

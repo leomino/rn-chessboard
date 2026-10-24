@@ -1,4 +1,10 @@
-import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
+import {
+  Chess,
+  type Color,
+  type Move,
+  type PieceSymbol,
+  type Square,
+} from 'chess.js';
 
 export type PieceIds = Readonly<Record<Square, Square>>;
 
@@ -70,6 +76,20 @@ export function cloneChess(chess: Chess): Chess {
   // Preserve the initial FEN, move stack, and repetition counts.
   copy.loadPgn(chess.pgn());
   return copy;
+}
+
+export function getPieceIdsAfterMove(ids: PieceIds, move: Move): PieceIds {
+  const next = { ...ids };
+  const swap = (from: Square, to: Square) => {
+    [next[from], next[to]] = [next[to], next[from]];
+  };
+  swap(move.from, move.to);
+  if (move.isKingsideCastle()) {
+    swap(`h${move.from[1]}` as Square, `f${move.from[1]}` as Square);
+  } else if (move.isQueensideCastle()) {
+    swap(`a${move.from[1]}` as Square, `d${move.from[1]}` as Square);
+  }
+  return next;
 }
 
 export function getBoardPieces(chess: Chess, ids: PieceIds): BoardPiece[] {

@@ -6433,6 +6433,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"expo-system-ui@npm:~58.0.6":
+  version: 58.0.6
+  resolution: "expo-system-ui@npm:58.0.6"
+  dependencies:
+    "@react-native/normalize-colors": "npm:0.88.0"
+    debug: "npm:^4.3.2"
+  peerDependencies:
+    expo: "*"
+    react-native: "*"
+    react-native-web: "*"
+  peerDependenciesMeta:
+    react-native-web:
+      optional: true
+  checksum: 10/edb7ca6f584734bc240762498693d2a6feb23cd03a64584ff8ac2016676a623b7ad28f08677cef4ef995c10c68e9212aecb5389f726c04db46359a1a25504c08
+  languageName: node
+  linkType: hard
+
 "expo@npm:~58.0.17":
   version: 58.0.17
   resolution: "expo@npm:58.0.17"
@@ -10611,6 +10628,7 @@ __metadata:
     expo-haptics: "npm:~58.0.7"
     expo-splash-screen: "npm:~58.0.11"
     expo-status-bar: "npm:~58.0.4"
+    expo-system-ui: "npm:~58.0.6"
     react: "npm:19.3.0"
     react-dom: "npm:19.3.0"
     react-native: "npm:0.88.0"

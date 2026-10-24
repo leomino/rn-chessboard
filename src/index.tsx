@@ -40,6 +40,8 @@ type ChessBoardRef = {
   undo: () => boolean;
   /** Clear the game and cancel interactions, preserving board orientation. */
   reset: () => void;
+  /** Replace the game with a PGN at its final position. Throws on invalid input. */
+  loadPgn: (pgn: string) => void;
   getHistoryState: () => ChessBoardHistoryState;
 };
 
@@ -64,6 +66,7 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
     const seekTo = useChessStore((state) => state.seekTo);
     const undo = useChessStore((state) => state.undo);
     const reset = useChessStore((state) => state.reset);
+    const loadPgn = useChessStore((state) => state.loadPgn);
     const getHistoryState = useChessStore((state) => state.getHistoryState);
     const callbacks = useRef({ onMove, onHistoryChange });
     const clock = useHistoryAnimation(transition, orientation);
@@ -119,6 +122,7 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
       seekTo,
       undo,
       reset,
+      loadPgn,
       getHistoryState,
     }));
 

@@ -11,6 +11,7 @@ import { usePromotionStore } from './promotionStore';
 import {
   cloneChess,
   getBoardPieces,
+  getPieceIdsAfterMove,
   getPieceTransitions,
   type ChessBoardHistoryState,
   type ChessBoardHistoryMove,
@@ -45,6 +46,7 @@ type ChessStore = {
   seekTo: (index: number, options?: ChessBoardSeekOptions) => boolean;
   undo: () => boolean;
   reset: () => void;
+  loadPgn: (pgn: string) => void;
   getHistoryState: () => ChessBoardHistoryState;
   finishTransition: (id: number) => void;
   releaseInteractions: () => void;
@@ -182,19 +184,7 @@ export const useChessStore = create<ChessStore>()((set, get) => {
         }
         if (get().positionRevision !== expectedRevision) return;
         const played = chess.move({ from, to, promotion });
-        const pieceIds = { ...state.pieceIds };
-        const swapIds = (source: Square, destination: Square) => {
-          [pieceIds[source], pieceIds[destination]] = [
-            pieceIds[destination],
-            pieceIds[source],
-          ];
-        };
-        swapIds(from, to);
-        if (played.isKingsideCastle()) {
-          swapIds(`h${from[1]}` as Square, `f${from[1]}` as Square);
-        } else if (played.isQueensideCastle()) {
-          swapIds(`a${from[1]}` as Square, `d${from[1]}` as Square);
-        }
+        const pieceIds = getPieceIdsAfterMove(state.pieceIds, played);
         const entry: HistoryEntry = {
           from,
           to,
@@ -340,6 +330,61 @@ export const useChessStore = create<ChessStore>()((set, get) => {
         historyEntries: [],
         historyMoves: [],
         historyIndex: 0,
+        transition: null,
+        selectedSquare: null,
+        lastPlayedMove: null,
+        movePending: false,
+        drag: null,
+        positionRevision: get().positionRevision + 1,
+      });
+    },
+    loadPgn: (pgn) => {
+      if (!pgn.trim()) throw new Error('Paste a PGN game to import.');
+
+      // Validate and build the entire timeline before touching the live game.
+      const chess = new Chess();
+      chess.loadPgn(pgn.trim());
+      const moves = chess.history({ verbose: true });
+      const entries: HistoryEntry[] = [];
+      let pieceIds = initialPieceIds();
+      for (const move of moves) {
+        const nextIds = getPieceIdsAfterMove(pieceIds, move);
+        entries.push({
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion,
+          san: move.san,
+          before: move.before,
+          after: move.after,
+          // Filled below with complete move stacks, not just FEN positions.
+          chessBefore: chess,
+          chessAfter: chess,
+          pieceIdsBefore: pieceIds,
+          pieceIdsAfter: nextIds,
+        });
+        pieceIds = nextIds;
+      }
+      let position = chess;
+      for (let index = entries.length - 1; index >= 0; index--) {
+        const entry = entries[index]!;
+        entry.chessAfter = position;
+        position = cloneChess(position);
+        position.undo();
+        entry.chessBefore = position;
+      }
+
+      usePromotionStore.getState().cancelModal();
+      set({
+        chess,
+        pieceIds,
+        historyEntries: entries,
+        historyMoves: moves.map((move, index) => ({
+          index: index + 1,
+          san: move.san,
+          moveNumber: Number(move.before.split(' ')[5]),
+          color: move.color,
+        })),
+        historyIndex: entries.length,
         transition: null,
         selectedSquare: null,
         lastPlayedMove: null,

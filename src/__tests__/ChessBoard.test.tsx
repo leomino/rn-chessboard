@@ -319,6 +319,34 @@ it('exposes undo and reset and reports history edits without firing onMove', asy
   expect(onMove).toHaveBeenCalledTimes(3);
 });
 
+it('imports through the ref and reports replacement history without firing onMove', () => {
+  const ref = createRef<ChessBoardRef>();
+  const onMove = jest.fn();
+  const onHistoryChange = jest.fn();
+  act(() => {
+    renderer = create(
+      <ChessBoard ref={ref} onMove={onMove} onHistoryChange={onHistoryChange} />
+    );
+  });
+  onHistoryChange.mockClear();
+  act(() => ref.current!.loadPgn('1. e4 e5 *'));
+  expect(onHistoryChange).toHaveBeenCalledTimes(1);
+  expect(onHistoryChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ index: 2, length: 2 })
+  );
+  expect(renderer.root.findByProps({ square: 'e4' }).props.type).toBe('p');
+  // Replacing with a game of the same length must still notify the seeker.
+  act(() => ref.current!.loadPgn('1. d4 d5 *'));
+  expect(onHistoryChange).toHaveBeenCalledTimes(2);
+  expect(ref.current!.getHistoryState().moves.map((move) => move.san)).toEqual([
+    'd4',
+    'd5',
+  ]);
+  expect(() => ref.current!.loadPgn('invalid')).toThrow();
+  expect(onHistoryChange).toHaveBeenCalledTimes(2);
+  expect(onMove).not.toHaveBeenCalled();
+});
+
 it('keeps the moving piece mounted and renders a capture victim until playback completes', async () => {
   act(() => {
     renderer = create(<ChessBoard />);

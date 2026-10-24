@@ -5,12 +5,15 @@ import type { Color } from 'chess.js';
 import {
   Platform,
   SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import PgnImportModal from './PgnImportModal';
+import { useAppTheme } from './theme';
 
 function playMoveHaptic(san = '') {
   if (Platform.OS !== 'ios') return;
@@ -22,9 +25,12 @@ function playMoveHaptic(san = '') {
 }
 
 export default function App() {
+  const { scheme, colors } = useAppTheme();
+  const buttonStyle = [styles.button, { backgroundColor: colors.surface }];
   const chessBoardRef = useRef<ChessBoardRef>(null);
   const [orientation, setOrientation] = useState<Color>('w');
   const [history, setHistory] = useState<ChessBoardHistoryState | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const toggleOrientation = () => {
     if (orientation === 'w') {
@@ -37,7 +43,10 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.main}>
+    <SafeAreaView style={[styles.main, { backgroundColor: colors.background }]}>
+      <StatusBar
+        barStyle={scheme === 'dark' ? 'light-content' : 'dark-content'}
+      />
       <ChessBoard
         initialOrientation={orientation}
         ref={chessBoardRef}
@@ -54,31 +63,45 @@ export default function App() {
       <View style={styles.actions}>
         <TouchableOpacity
           accessibilityRole="button"
+          accessibilityLabel="Import PGN"
+          style={buttonStyle}
+          onPress={() => setImportOpen(true)}
+        >
+          <Text style={{ color: colors.text }}>Import PGN</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
           accessibilityLabel="Undo last move"
           accessibilityState={{ disabled: !history?.canUndo }}
           disabled={!history?.canUndo}
-          style={[styles.button, !history?.canUndo && styles.disabled]}
+          style={[buttonStyle, !history?.canUndo && styles.disabled]}
           onPress={() => chessBoardRef.current?.undo()}
         >
-          <Text>Undo</Text>
+          <Text style={{ color: colors.text }}>Undo</Text>
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Reset game"
-          style={styles.button}
+          style={buttonStyle}
           onPress={() => chessBoardRef.current?.reset()}
         >
-          <Text>Reset</Text>
+          <Text style={{ color: colors.text }}>Reset</Text>
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Flip board"
-          style={styles.button}
+          style={buttonStyle}
           onPress={toggleOrientation}
         >
-          <Text>Flip</Text>
+          <Text style={{ color: colors.text }}>Flip</Text>
         </TouchableOpacity>
       </View>
+      {importOpen && (
+        <PgnImportModal
+          onImport={(pgn) => chessBoardRef.current?.loadPgn(pgn)}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -89,13 +112,13 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 12,
     paddingVertical: 12,
   },
   disabled: { opacity: 0.35 },
   button: {
-    backgroundColor: '#fff',
     minWidth: 80,
     minHeight: 44,
     paddingHorizontal: 12,
