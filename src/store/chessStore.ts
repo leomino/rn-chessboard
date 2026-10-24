@@ -13,6 +13,8 @@ import {
   getBoardPieces,
   getPieceTransitions,
   type ChessBoardHistoryState,
+  type ChessBoardHistoryMove,
+  type ChessBoardSeekOptions,
   type HistoryEntry,
   type HistoryTransition,
   type PieceIds,
@@ -24,6 +26,7 @@ type ChessStore = {
   chess: Chess;
   pieceIds: PieceIds;
   historyEntries: readonly HistoryEntry[];
+  historyMoves: readonly ChessBoardHistoryMove[];
   historyIndex: number;
   transition: HistoryTransition | null;
   positionRevision: number;
@@ -39,6 +42,7 @@ type ChessStore = {
   setOrientation: (value: Color) => void;
   goBack: () => boolean;
   goForward: () => boolean;
+  seekTo: (index: number, options?: ChessBoardSeekOptions) => boolean;
   getHistoryState: () => ChessBoardHistoryState;
   finishTransition: (id: number) => void;
   releaseInteractions: () => void;
@@ -57,6 +61,8 @@ export function selectHistoryState(state: ChessStore): ChessBoardHistoryState {
   return {
     index: state.historyIndex,
     length: state.historyEntries.length,
+    moves: state.historyMoves,
+    canSeek: !state.movePending && !state.drag,
     canGoBack: idle && state.historyIndex > 0,
     canGoForward: idle && state.historyIndex < state.historyEntries.length,
     isReviewing: state.historyIndex < state.historyEntries.length,
@@ -68,43 +74,59 @@ export function selectHistoryState(state: ChessStore): ChessBoardHistoryState {
 let nextTransitionId = 0;
 
 export const useChessStore = create<ChessStore>()((set, get) => {
-  const navigate = (direction: -1 | 1): boolean => {
+  const seekTo = (
+    index: number,
+    { animated = true, duration = 200 }: ChessBoardSeekOptions = {}
+  ): boolean => {
     const state = get();
-    const availability = selectHistoryState(state);
     if (
-      direction === -1 ? !availability.canGoBack : !availability.canGoForward
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index > state.historyEntries.length ||
+      (animated && (!Number.isFinite(duration) || duration < 0)) ||
+      !selectHistoryState(state).canSeek
     ) {
       return false;
     }
-    const entry =
-      state.historyEntries[
-        direction === -1 ? state.historyIndex - 1 : state.historyIndex
-      ]!;
-    const chess = cloneChess(state.chess);
-    if (direction === -1) {
-      chess.undo();
-    } else {
-      chess.move({
-        from: entry.from,
-        to: entry.to,
-        promotion: entry.promotion,
-      });
+    if (index === state.historyIndex) {
+      if ((state.transition && !animated) || state.selectedSquare) {
+        set({
+          transition: animated ? state.transition : null,
+          selectedSquare: null,
+          positionRevision: state.positionRevision + 1,
+        });
+      }
+      return true;
     }
+    // Reuse the position already produced when this move was played. Replaying
+    // PGN on every scroll event scales with game length and blocks the JS thread.
+    // These instances retain their move stacks and repetition counts; move()
+    // clones them before making any changes.
+    const chess =
+      index === 0
+        ? state.historyEntries[0]!.chessBefore
+        : state.historyEntries[index - 1]!.chessAfter;
     const pieceIds =
-      direction === -1 ? entry.pieceIdsBefore : entry.pieceIdsAfter;
+      index === 0
+        ? state.historyEntries[0]!.pieceIdsBefore
+        : state.historyEntries[index - 1]!.pieceIdsAfter;
     set({
       chess,
       pieceIds,
-      historyIndex: state.historyIndex + direction,
+      historyIndex: index,
       positionRevision: state.positionRevision + 1,
       selectedSquare: null,
-      transition: {
-        id: ++nextTransitionId,
-        pieces: getPieceTransitions(
-          getBoardPieces(state.chess, state.pieceIds),
-          getBoardPieces(chess, pieceIds)
-        ),
-      },
+      transition: animated
+        ? {
+            id: ++nextTransitionId,
+            duration,
+            pieces: getPieceTransitions(
+              getBoardPieces(state.chess, state.pieceIds),
+              getBoardPieces(chess, pieceIds),
+              state.transition?.pieces
+            ),
+          }
+        : null,
     });
     return true;
   };
@@ -116,6 +138,7 @@ export const useChessStore = create<ChessStore>()((set, get) => {
       SQUARES.map((square) => [square, square])
     ) as Record<Square, Square>,
     historyEntries: [],
+    historyMoves: [],
     historyIndex: 0,
     transition: null,
     positionRevision: 0,
@@ -171,6 +194,8 @@ export const useChessStore = create<ChessStore>()((set, get) => {
           san: played.san,
           before: played.before,
           after: played.after,
+          chessBefore: state.chess,
+          chessAfter: chess,
           pieceIdsBefore: state.pieceIds,
           pieceIdsAfter: pieceIds,
         };
@@ -178,6 +203,15 @@ export const useChessStore = create<ChessStore>()((set, get) => {
           chess,
           pieceIds,
           historyEntries: [...state.historyEntries, entry],
+          historyMoves: [
+            ...state.historyMoves,
+            {
+              index: state.historyIndex + 1,
+              san: played.san,
+              moveNumber: Number(played.before.split(' ')[5]),
+              color: played.color,
+            },
+          ],
           historyIndex: state.historyIndex + 1,
           positionRevision: expectedRevision + 1,
           lastPlayedMove: played,
@@ -258,8 +292,11 @@ export const useChessStore = create<ChessStore>()((set, get) => {
         positionRevision: state.positionRevision + (state.movePending ? 0 : 1),
       });
     },
-    goBack: () => navigate(-1),
-    goForward: () => navigate(1),
+    goBack: () =>
+      selectHistoryState(get()).canGoBack && seekTo(get().historyIndex - 1),
+    goForward: () =>
+      selectHistoryState(get()).canGoForward && seekTo(get().historyIndex + 1),
+    seekTo,
     getHistoryState: () => selectHistoryState(get()),
     finishTransition: (id) => {
       if (get().transition?.id === id) set({ transition: null });

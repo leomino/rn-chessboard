@@ -9,13 +9,9 @@ const SquareHighlights = memo(() => {
   const selectedSquare = useChessStore((state) => state.selectedSquare);
   const orientation = useChessStore((state) => state.orientation);
 
-  const lastMove = useMemo(() => {
-    const history = chess.history({ verbose: true });
-    if (history.length) {
-      return history[history.length - 1];
-    }
-    return undefined;
-  }, [chess]);
+  const lastMove = useChessStore(
+    (state) => state.historyEntries[state.historyIndex - 1]
+  );
 
   const lastMoveOrigin = useMemo(() => {
     if (!lastMove) {

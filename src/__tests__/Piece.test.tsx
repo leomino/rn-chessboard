@@ -13,6 +13,10 @@ import {
 import Piece from '../components/Piece';
 import { pieces, SQUARE_SIZE, toCoordinates } from '../Constants';
 import { useChessStore } from '../store/chessStore';
+import {
+  retargetPieceAnimations,
+  type PieceAnimations,
+} from '../utils/historyAnimation';
 
 jest.mock('react-native', () => ({
   Dimensions: { get: () => ({ width: 320 }) },
@@ -125,6 +129,7 @@ function clock() {
   return {
     progress: { value: 1 } as SharedValue<number>,
     activeId: { value: 0 } as SharedValue<number>,
+    pieces: { value: {} } as SharedValue<PieceAnimations>,
   };
 }
 
@@ -207,6 +212,123 @@ it.each([false, true])('fades a capture (restoring: %s)', (restoring) => {
   expect(style().opacity).toBe(restoring ? 0 : 1);
   playback.clock.progress.value = 1;
   expect(style().opacity).toBe(restoring ? 1 : 0);
+});
+
+it('renders interrupted playback from the sampled position instead of the logical source square', () => {
+  const animationClock = clock();
+  const first: Playback = {
+    id: 1,
+    clock: animationClock,
+    piece: {
+      id: 'g1',
+      from: { id: 'g1', square: 'g1', type: 'n', color: 'w' },
+      to: { id: 'g1', square: 'f3', type: 'n', color: 'w' },
+    },
+  };
+  animationClock.activeId.value = 1;
+  animationClock.progress.value = 0.5;
+  animationClock.pieces.value = {
+    g1: {
+      from: { x: 240, y: 280, opacity: 1 },
+      to: { x: 200, y: 200, opacity: 1 },
+    },
+  };
+  act(() => {
+    renderer = create(
+      <Piece square="f3" type="n" color="w" playback={first} />
+    );
+  });
+  const oldStyle = jest.mocked(useAnimatedStyle).mock.calls.at(-2)![0];
+  expect(oldStyle().transform).toEqual([
+    { translateX: 220 },
+    { translateY: 240 },
+    { scale: 1 },
+  ]);
+  const next: Playback = {
+    ...first,
+    id: 2,
+    piece: {
+      ...first.piece,
+      from: first.piece.to,
+      to: { id: 'g1', square: 'e5', type: 'n', color: 'w' },
+    },
+  };
+  act(() => {
+    renderer.update(<Piece square="e5" type="n" color="w" playback={next} />);
+  });
+  const nextStyle = jest.mocked(useAnimatedStyle).mock.calls.at(-2)![0];
+  // New React props can arrive before the clock has retargeted on the UI thread.
+  expect(nextStyle()).toEqual(oldStyle());
+  animationClock.pieces.value = retargetPieceAnimations(
+    animationClock.pieces.value,
+    {
+      g1: {
+        from: { x: 200, y: 200, opacity: 1 },
+        to: { x: 160, y: 120, opacity: 1 },
+      },
+    },
+    0.5
+  );
+  animationClock.activeId.value = 2;
+  animationClock.progress.value = 0;
+  expect(nextStyle().transform).toEqual([
+    { translateX: 220 },
+    { translateY: 240 },
+    { scale: 1 },
+  ]);
+  animationClock.progress.value = 0.5;
+  expect(nextStyle().transform).toEqual([
+    { translateX: 190 },
+    { translateY: 180 },
+    { scale: 1 },
+  ]);
+  // Old worklets must follow the same visual trajectory during React's commit.
+  expect(oldStyle()).toEqual(nextStyle());
+});
+
+it('keeps unchanged playback worklets mounted and skips legal move generation while seeking', () => {
+  const chess = useChessStore.getState().chess;
+  const moves = jest.spyOn(chess, 'moves');
+  const pawn = {
+    id: 'a2' as const,
+    square: 'a2' as const,
+    type: 'p' as const,
+    color: 'w' as const,
+  };
+  const playback: Playback = {
+    id: 1,
+    clock: clock(),
+    piece: { id: 'a2', from: pawn, to: pawn },
+  };
+  act(() => {
+    renderer = create(
+      <Piece square="a2" type="p" color="w" playback={playback} />
+    );
+  });
+  expect(moves).not.toHaveBeenCalled();
+  const panCount = jest.mocked(Gesture.Pan).mock.calls.length;
+  for (let id = 2; id <= 20; id++) {
+    act(() => {
+      useChessStore.setState({ chess: new Chess(), positionRevision: id });
+      renderer.update(
+        <Piece
+          square="a2"
+          type="p"
+          color="w"
+          playback={{
+            ...playback,
+            id,
+            piece: { id: 'a2', from: { ...pawn }, to: { ...pawn } },
+          }}
+        />
+      );
+    });
+  }
+  expect(Gesture.Pan).toHaveBeenCalledTimes(panCount);
+  // Orientation is still reactive even though history subscriptions are skipped.
+  act(() => useChessStore.getState().setOrientation('b'));
+  expect(Gesture.Pan).toHaveBeenCalledTimes(panCount + 1);
+  moves.mockRestore();
 });
 
 it.each([false, true])(

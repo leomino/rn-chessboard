@@ -158,6 +158,7 @@ export default function Game() {
 | --- | --- |
 | `goBack()` | Starts one animated step backward. Returns `true` if accepted. |
 | `goForward()` | Starts one animated step forward. Returns `true` if accepted. |
+| `seekTo(index, options?)` | Jumps to any recorded position. Animates by default; pass `{ animated: false }` for instant scrubbing. Returns `true` if accepted, including an already-selected position. |
 | `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
 
 Each step is one half-move (one player's move). The history state contains:
@@ -166,23 +167,77 @@ Each step is one half-move (one player's move). The history state contains:
 | --- | --- |
 | `index` | Applied half-moves; `0` is the initial position. |
 | `length` | Total recorded half-moves, including those ahead of the cursor. |
+| `moves` | Stable, read-only list of `{ index, san, moveNumber, color }` entries, including future moves. |
+| `canSeek` | Direct seeking is allowed; false during a piece drag or pending move/promotion. |
 | `canGoBack`, `canGoForward` | Whether that action is currently available. |
 | `isReviewing` | The displayed position is earlier than the latest position. |
 | `isAnimating` | A history transition is in progress. |
 
 The cursor updates to the target position when a step starts. Navigation becomes
-available again after its animation finishes. Requests at a boundary, during an
+available again after its animation finishes. Back/forward requests at a boundary, during an
 animation, while dragging, or while choosing a promotion return `false`.
+
+Direct seeks can interrupt an animation; the latest accepted target wins. Pieces
+retarget from their current on-screen positions and opacity, including jumps
+between nonadjacent positions. Seeking to the current index preserves playback;
+passing `{ animated: false }` settles it immediately. Non-integer or out-of-range
+indices return `false`. The initial position is index `0`.
 
 Earlier positions are read-only: return to the latest position to continue play.
 The complete timeline is preserved while browsing. `onMove` fires for newly
 played moves; use `onHistoryChange` to respond to navigation.
 
-Playback uses synchronized 200 ms piece animations, including both pieces during
+Playback defaults to synchronized 200 ms piece animations, including both pieces during
 castling, captured-piece fades, en passant restoration, and promotion reversal.
 Promotions replay the original selection. Animations respect system reduced-motion
 preferences. Rotating during playback settles the step at its target and applies
 the new orientation.
+
+Pass `seekTo(index, { duration: 80 })` to use a shorter animation (milliseconds).
+Durations below 200 ms use a fast-starting ease-out curve. Negative or non-finite
+durations are rejected for animated seeks. Fades begin immediately in both directions.
+
+### Horizontal history seeker
+
+`ChessBoardHistory` is an optional controlled component with move names, a selected
+move highlight, and previous/next chevrons. Tap a move to jump, or drag the strip
+to scrub through positions at its center. Pieces animate between selected positions
+while scrubbing, and the strip snaps to a move when scrolling stops. External navigation automatically
+centers the selected move. **Start** selects the initial position.
+
+Fast scrubbing coalesces intermediate targets into at most one update every 50 ms;
+piece animations use an 80 ms ease-out on the UI thread between updates. The final selected
+position is applied immediately when scrolling settles.
+
+```tsx
+import { useRef, useState } from 'react';
+import { View } from 'react-native';
+import ChessBoard, {
+  ChessBoardHistory,
+  type ChessBoardHistoryState,
+  type ChessBoardRef,
+} from 'rn-chessboard';
+
+function Game() {
+  const board = useRef<ChessBoardRef>(null);
+  const [history, setHistory] = useState<ChessBoardHistoryState | null>(null);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ChessBoard ref={board} onHistoryChange={setHistory} />
+      <ChessBoardHistory
+        history={history}
+        onSeek={(index, options) => board.current?.seekTo(index, options)}
+      />
+    </View>
+  );
+}
+```
+
+The seeker accepts `history`, `onSeek`, and an optional container `style`.
+`ChessBoardHistoryProps`, `ChessBoardHistoryMove`, and `ChessBoardSeekOptions`
+are exported for TypeScript consumers. Move numbering respects the starting
+position, including games starting with Black to move.
 
 ### Optional haptics
 

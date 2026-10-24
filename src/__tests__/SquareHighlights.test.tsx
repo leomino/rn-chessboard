@@ -68,3 +68,25 @@ it.each<Color>(['w', 'b'])(
     expect(renderer.root.findAllByType(View)).toHaveLength(0);
   }
 );
+
+it('reads the highlighted move directly without replaying the chess move stack', async () => {
+  await useChessStore.getState().move('e2', 'e4');
+  await useChessStore.getState().move('e7', 'e5');
+  const history = jest.spyOn(Chess.prototype, 'history');
+  try {
+    act(() => {
+      renderer = create(<SquareHighlights />);
+    });
+    act(() => {
+      useChessStore.getState().seekTo(1);
+    });
+    expect(renderer.root.findAllByType(View)).toHaveLength(2);
+    act(() => {
+      useChessStore.getState().seekTo(0);
+    });
+    expect(renderer.root.findAllByType(View)).toHaveLength(0);
+    expect(history).not.toHaveBeenCalled();
+  } finally {
+    history.mockRestore();
+  }
+});

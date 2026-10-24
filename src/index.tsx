@@ -17,7 +17,11 @@ import { runOnJS } from 'react-native-reanimated';
 import { shallow } from 'zustand/shallow';
 import { canPlay, selectHistoryState, useChessStore } from './store/chessStore';
 import { useHistoryAnimation } from './hooks/useHistoryAnimation';
-import { getBoardPieces, type ChessBoardHistoryState } from './utils/history';
+import {
+  getBoardPieces,
+  type ChessBoardHistoryState,
+  type ChessBoardSeekOptions,
+} from './utils/history';
 import { SQUARE_SIZE, toSquare } from './Constants';
 import SquareHighlights from './components/SquareHighlights';
 import PromotionModal from './components/PromotionModal';
@@ -30,6 +34,8 @@ type ChessBoardRef = {
   goBack: () => boolean;
   /** Returns true when an animated step is accepted. */
   goForward: () => boolean;
+  /** Seek directly, interrupting playback. Defaults to animated. */
+  seekTo: (index: number, options?: ChessBoardSeekOptions) => boolean;
   getHistoryState: () => ChessBoardHistoryState;
 };
 
@@ -51,9 +57,10 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
     const interactive = useChessStore(canPlay);
     const goBack = useChessStore((state) => state.goBack);
     const goForward = useChessStore((state) => state.goForward);
+    const seekTo = useChessStore((state) => state.seekTo);
     const getHistoryState = useChessStore((state) => state.getHistoryState);
     const callbacks = useRef({ onMove, onHistoryChange });
-    const clock = useHistoryAnimation(transition?.id ?? null);
+    const clock = useHistoryAnimation(transition, orientation);
     const renderedPieces = useMemo(
       () =>
         transition
@@ -103,6 +110,7 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
       setOrientation,
       goBack,
       goForward,
+      seekTo,
       getHistoryState,
     }));
 
@@ -152,4 +160,10 @@ const styles = StyleSheet.create({
 });
 
 export type { ChessBoardProps, ChessBoardRef, ChessBoardHistoryState };
+export type {
+  ChessBoardHistoryMove,
+  ChessBoardSeekOptions,
+} from './utils/history';
+export { default as ChessBoardHistory } from './components/ChessBoardHistory';
+export type { ChessBoardHistoryProps } from './components/ChessBoardHistory';
 export default ChessBoard;

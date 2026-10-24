@@ -109,7 +109,7 @@ async function main() {
   fs.writeFileSync(
     path.join(consumer, 'App.tsx'),
     `import { createRef, type ComponentRef } from 'react';
-import ChessBoard, { type ChessBoardProps, type ChessBoardRef, type ChessBoardHistoryState } from 'rn-chessboard';
+import ChessBoard, { ChessBoardHistory, type ChessBoardProps, type ChessBoardRef, type ChessBoardHistoryState, type ChessBoardHistoryMove, type ChessBoardSeekOptions } from 'rn-chessboard';
 const ref = createRef<ChessBoardRef>();
 const inferredRef = createRef<ComponentRef<typeof ChessBoard>>();
 const props: ChessBoardProps = {
@@ -126,13 +126,17 @@ const accepted: boolean | undefined = ref.current?.goBack();
 inferredRef.current?.goForward();
 const history: ChessBoardHistoryState | undefined = ref.current?.getHistoryState();
 console.log(accepted, history);
+const options: ChessBoardSeekOptions = { animated: true, duration: 80 };
+const sought: boolean | undefined = ref.current?.seekTo(0, options);
+const moves: readonly ChessBoardHistoryMove[] = history?.moves ?? [];
+console.log(sought, moves, history?.canSeek);
 // @ts-expect-error Navigation takes no arguments.
 ref.current?.goForward(1);
 // @ts-expect-error Only chess.js colors are valid orientations.
 ref.current?.setOrientation('invalid');
 // @ts-expect-error Invalid ref handles must be rejected.
 const invalid = <ChessBoard ref={createRef<{ wrong: string }>()} />;
-export default function App() { return <ChessBoard {...props} ref={ref} />; }
+export default function App() { return <><ChessBoard {...props} ref={ref} /><ChessBoardHistory history={history ?? null} onSeek={(index, options) => ref.current?.seekTo(index, options)} /></>; }
 `
   );
   for (const resolution of ['node16', 'bundler']) {

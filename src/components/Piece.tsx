@@ -7,20 +7,16 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image, StyleSheet } from 'react-native';
 import { canPlay, useChessStore } from '../store/chessStore';
 import { pieces, SQUARE_SIZE, toCoordinates, toSquare } from '../Constants';
 import type { PieceTransition } from '../utils/history';
 import type { HistoryAnimation } from '../hooks/useHistoryAnimation';
+import { samplePieceAnimation } from '../utils/historyAnimation';
 
-const Piece = ({
-  square,
-  type,
-  color,
-  playback,
-}: {
+type PieceProps = {
   square: Square;
   type: PieceSymbol;
   color: Color;
@@ -29,12 +25,17 @@ const Piece = ({
     piece: PieceTransition;
     clock: HistoryAnimation;
   };
-}) => {
-  const chess = useChessStore((state) => state.chess);
+};
+
+const Piece = ({ square, type, color, playback }: PieceProps) => {
+  // Playback is driven by shared values, not board subscriptions. In particular,
+  // don't rebuild every piece's gestures on each history cursor revision.
+  const chess = useChessStore((state) => (playback ? null : state.chess));
   const orientation = useChessStore((state) => state.orientation);
-  const turn = useChessStore((state) => state.chess.turn());
-  const interactive = useChessStore(canPlay);
-  const revision = useChessStore((state) => state.positionRevision);
+  const interactive = useChessStore((state) => !playback && canPlay(state));
+  const revision = useChessStore((state) =>
+    playback ? 0 : state.positionRevision
+  );
   const beginDrag = useChessStore((state) => state.beginDrag);
   const endDrag = useChessStore((state) => state.endDrag);
   const coordinates = toCoordinates(square, orientation);
@@ -98,17 +99,19 @@ const Piece = ({
 
   const destinations = useMemo(
     () =>
-      chess
-        .moves({
-          verbose: true,
-          square,
-        })
-        .map(({ to }) => to),
-    [square, chess]
+      chess && interactive && chess.turn() === color
+        ? chess
+            .moves({
+              verbose: true,
+              square,
+            })
+            .map(({ to }) => to)
+        : [],
+    [square, chess, interactive, color]
   );
 
   const pan = Gesture.Pan()
-    .enabled(!playback && interactive && turn === color)
+    .enabled(!playback && interactive && chess?.turn() === color)
     .minVelocity(0)
     .minDistance(0)
     .onBegin(() => runOnJS(beginDrag)(square, revision))
@@ -165,26 +168,32 @@ const Piece = ({
   const animatedStyles = useAnimatedStyle(() => {
     if (playback) {
       const { clock, id, piece } = playback;
-      // A new render may arrive before its UI-thread clock starts. Old render
-      // worklets must also stay at the end when a newer transition starts.
+      // Before the new clock starts, sample the previous animation. After it
+      // starts, even old render worklets follow the newly retargeted trajectory.
+      const animation = clock.pieces.value[piece.id];
       const progress =
         clock.activeId.value === id
           ? clock.progress.value
           : clock.activeId.value < id
             ? 0
             : 1;
+      const frame = samplePieceAnimation(
+        animation ?? {
+          from: { ...origin, opacity: piece.from ? 1 : 0 },
+          to: { ...target, opacity: piece.to ? 1 : 0 },
+        },
+        animation ? clock.progress.value : progress
+      );
+      const from = animation?.from ?? origin;
+      const to = animation?.to ?? target;
       return {
         transform: [
-          { translateX: origin.x + (target.x - origin.x) * progress },
-          { translateY: origin.y + (target.y - origin.y) * progress },
+          { translateX: frame.x },
+          { translateY: frame.y },
           { scale: 1 },
         ],
-        opacity: !piece.from
-          ? Math.min(1, progress * 3)
-          : !piece.to
-            ? Math.min(1, (1 - progress) * 3)
-            : 1,
-        zIndex: origin.x !== target.x || origin.y !== target.y ? 4 : 1,
+        opacity: frame.opacity,
+        zIndex: from.x !== to.x || from.y !== to.y ? 4 : 1,
       };
     }
     return {
@@ -252,4 +261,32 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Piece;
+function samePiece(a: PieceTransition['from'], b: PieceTransition['from']) {
+  return (
+    a === b ||
+    (!!a &&
+      !!b &&
+      a.id === b.id &&
+      a.square === b.square &&
+      a.type === b.type &&
+      a.color === b.color)
+  );
+}
+
+export default memo(Piece, (previous, next) => {
+  if (
+    previous.square !== next.square ||
+    previous.type !== next.type ||
+    previous.color !== next.color
+  )
+    return false;
+  if (!previous.playback || !next.playback)
+    return previous.playback === next.playback;
+  // The transition ID changes on every seek, but unchanged pieces can keep their
+  // existing worklets: those read the latest trajectory from the shared clock.
+  return (
+    previous.playback.clock === next.playback.clock &&
+    samePiece(previous.playback.piece.from, next.playback.piece.from) &&
+    samePiece(previous.playback.piece.to, next.playback.piece.to)
+  );
+});

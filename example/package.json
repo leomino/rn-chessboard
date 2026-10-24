@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "preview:ios": "expo run:ios --configuration Release --no-bundler --device"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.15",

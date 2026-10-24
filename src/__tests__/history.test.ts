@@ -255,3 +255,140 @@ it('describes both castling pieces and the en passant victim by identity', async
     to: { id: 'd7', square: 'd5', type: 'p', color: 'b' },
   });
 });
+
+it.each(fixtures)(
+  'seeks directly without losing chess state: $name',
+  async ({ fen, moves }) => {
+    if (fen) useChessStore.setState({ chess: new Chess(fen) });
+    const positions = [snapshot()];
+    for (const san of moves) {
+      await play(san);
+      positions.push(snapshot());
+    }
+    const entries = useChessStore.getState().historyEntries;
+    const publicMoves = useChessStore.getState().getHistoryState().moves;
+    const lastPlayed = useChessStore.getState().lastPlayedMove;
+    for (const index of [
+      0,
+      moves.length,
+      0,
+      1,
+      Math.floor(moves.length / 2),
+      moves.length,
+    ]) {
+      expect(useChessStore.getState().seekTo(index, { animated: false })).toBe(
+        true
+      );
+      expect(snapshot()).toEqual(positions[index]);
+      expect(useChessStore.getState().historyEntries).toBe(entries);
+      expect(useChessStore.getState().getHistoryState().moves).toBe(
+        publicMoves
+      );
+      expect(useChessStore.getState().transition).toBeNull();
+      expect(useChessStore.getState().lastPlayedMove).toBe(lastPlayed);
+      expect(usePromotionStore.getState().modalOpen).toBe(false);
+    }
+  }
+);
+
+it('accepts the latest seek during playback and ignores obsolete completions', async () => {
+  for (const san of ['e4', 'e5', 'Nf3', 'Nc6']) await play(san);
+  const { seekTo, finishTransition } = useChessStore.getState();
+  seekTo(0);
+  const firstId = useChessStore.getState().transition!.id;
+  seekTo(3);
+  const secondId = useChessStore.getState().transition!.id;
+  finishTransition(firstId);
+  expect(useChessStore.getState().transition?.id).toBe(secondId);
+  seekTo(1, { animated: false });
+  finishTransition(secondId);
+  expect(useChessStore.getState().chess.history()).toEqual(['e4']);
+  expect(useChessStore.getState().transition).toBeNull();
+  seekTo(4);
+  // Beginning a scrub at the current destination settles the animation.
+  expect(seekTo(4, { animated: false })).toBe(true);
+  expect(useChessStore.getState().transition).toBeNull();
+  await play('Bb5');
+  expect(useChessStore.getState().historyEntries).toHaveLength(5);
+  useChessStore.setState({ selectedSquare: 'a7' });
+  seekTo(5, { animated: false });
+  expect(useChessStore.getState().selectedSquare).toBeNull();
+});
+
+it('rejects invalid seek indices and respects drag and promotion locks', async () => {
+  await play('e4');
+  const before = snapshot();
+  for (const index of [-1, 2, 0.5, NaN, Infinity]) {
+    expect(useChessStore.getState().seekTo(index)).toBe(false);
+    expect(snapshot()).toEqual(before);
+  }
+  const { beginDrag, endDrag, positionRevision } = useChessStore.getState();
+  beginDrag('e7', positionRevision);
+  expect(useChessStore.getState().getHistoryState().canSeek).toBe(false);
+  expect(useChessStore.getState().seekTo(0)).toBe(false);
+  await endDrag('e7', null, positionRevision);
+  expect(useChessStore.getState().getHistoryState().canSeek).toBe(true);
+  useChessStore.setState({
+    ...useChessStore.getInitialState(),
+    chess: new Chess('7k/P7/8/8/8/8/8/7K w - - 0 1'),
+  });
+  const pending = useChessStore.getState().move('a7', 'a8');
+  expect(useChessStore.getState().getHistoryState().canSeek).toBe(false);
+  expect(useChessStore.getState().seekTo(0)).toBe(false);
+  usePromotionStore.getState().cancelModal();
+  await pending;
+});
+
+it('numbers public moves from a custom starting position, including Black to move', async () => {
+  useChessStore.setState({ chess: new Chess('7k/8/8/8/8/8/8/7K b - - 0 23') });
+  await play('Kg8');
+  await play('Kg1');
+  expect(useChessStore.getState().getHistoryState().moves).toEqual([
+    { index: 1, san: 'Kg8', color: 'b', moveNumber: 23 },
+    { index: 2, san: 'Kg1', color: 'w', moveNumber: 24 },
+  ]);
+});
+
+it('seeks in a long game without parsing, replaying, or mutating recorded positions', async () => {
+  for (let i = 0; i < 120; i++)
+    await play(['Nf3', 'Nf6', 'Ng1', 'Ng8'][i % 4]!);
+  const entries = useChessStore.getState().historyEntries;
+  const initial = entries[0]!.chessBefore;
+  const latest = entries.at(-1)!.chessAfter;
+  const snapshots = [initial, ...entries.map((entry) => entry.chessAfter)];
+  const fens = snapshots.map((chess) => chess.fen());
+  const expensive = [
+    jest.spyOn(Chess.prototype, 'pgn'),
+    jest.spyOn(Chess.prototype, 'loadPgn'),
+    jest.spyOn(Chess.prototype, 'move'),
+    jest.spyOn(Chess.prototype, 'undo'),
+  ];
+  try {
+    for (let i = 0; i < 240; i++) {
+      const target = (i * 37) % 121;
+      expect(useChessStore.getState().seekTo(target)).toBe(true);
+      expect(useChessStore.getState().chess).toBe(snapshots[target]);
+    }
+    for (const spy of expensive) expect(spy).not.toHaveBeenCalled();
+  } finally {
+    for (const spy of expensive) spy.mockRestore();
+  }
+  useChessStore.getState().seekTo(120, { animated: false });
+  await play('e4');
+  expect(useChessStore.getState().chess).not.toBe(latest);
+  expect(snapshots.map((chess) => chess.fen())).toEqual(fens);
+  expect(latest.history()).toHaveLength(120);
+  expect(latest.isThreefoldRepetition()).toBe(true);
+  expect(initial.history()).toEqual([]);
+});
+
+it('rejects invalid animation durations without changing the position', async () => {
+  await play('e4');
+  const before = snapshot();
+  for (const duration of [-1, NaN, Infinity]) {
+    expect(useChessStore.getState().seekTo(0, { duration })).toBe(false);
+    expect(snapshot()).toEqual(before);
+  }
+  expect(useChessStore.getState().seekTo(0, { duration: 0 })).toBe(true);
+  expect(useChessStore.getState().transition?.duration).toBe(0);
+});
