@@ -8,8 +8,18 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+
+function playMoveHaptic(san = '') {
+  if (Platform.OS !== 'ios') return;
+  Haptics.impactAsync(
+    /[x+#]/.test(san)
+      ? Haptics.ImpactFeedbackStyle.Heavy
+      : Haptics.ImpactFeedbackStyle.Light
+  ).catch(console.warn);
+}
 
 export default function App() {
   const chessBoardRef = useRef<ChessBoardRef>(null);
@@ -32,32 +42,43 @@ export default function App() {
         initialOrientation={orientation}
         ref={chessBoardRef}
         onHistoryChange={setHistory}
-        onMove={(move) => {
-          if (Platform.OS === 'ios') {
-            Haptics.impactAsync(
-              move.isCapture() ||
-                move.san.includes('+') ||
-                move.san.includes('#')
-                ? Haptics.ImpactFeedbackStyle.Heavy
-                : Haptics.ImpactFeedbackStyle.Light
-            ).catch(console.warn);
-          }
-        }}
+        onMove={(move) => playMoveHaptic(move.san)}
       />
       <ChessBoardHistory
         history={history}
         onSeek={(index, options) =>
           chessBoardRef.current?.seekTo(index, options)
         }
+        onSelectionChange={(_index, move) => playMoveHaptic(move?.san)}
       />
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Flip board"
-        style={styles.button}
-        onPress={toggleOrientation}
-      >
-        <Text>Flip</Text>
-      </TouchableOpacity>
+      <View style={styles.actions}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Undo last move"
+          accessibilityState={{ disabled: !history?.canUndo }}
+          disabled={!history?.canUndo}
+          style={[styles.button, !history?.canUndo && styles.disabled]}
+          onPress={() => chessBoardRef.current?.undo()}
+        >
+          <Text>Undo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Reset game"
+          style={styles.button}
+          onPress={() => chessBoardRef.current?.reset()}
+        >
+          <Text>Reset</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Flip board"
+          style={styles.button}
+          onPress={toggleOrientation}
+        >
+          <Text>Flip</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -66,6 +87,13 @@ const styles = StyleSheet.create({
   main: {
     flex: 1,
   },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  disabled: { opacity: 0.35 },
   button: {
     backgroundColor: '#fff',
     minWidth: 80,

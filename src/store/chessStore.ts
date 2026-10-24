@@ -43,6 +43,8 @@ type ChessStore = {
   goBack: () => boolean;
   goForward: () => boolean;
   seekTo: (index: number, options?: ChessBoardSeekOptions) => boolean;
+  undo: () => boolean;
+  reset: () => void;
   getHistoryState: () => ChessBoardHistoryState;
   finishTransition: (id: number) => void;
   releaseInteractions: () => void;
@@ -63,6 +65,8 @@ export function selectHistoryState(state: ChessStore): ChessBoardHistoryState {
     length: state.historyEntries.length,
     moves: state.historyMoves,
     canSeek: !state.movePending && !state.drag,
+    canUndo:
+      !state.movePending && !state.drag && state.historyEntries.length > 0,
     canGoBack: idle && state.historyIndex > 0,
     canGoForward: idle && state.historyIndex < state.historyEntries.length,
     isReviewing: state.historyIndex < state.historyEntries.length,
@@ -72,6 +76,12 @@ export function selectHistoryState(state: ChessStore): ChessBoardHistoryState {
 
 // IDs remain unique even when a board unmounts or the store is reset.
 let nextTransitionId = 0;
+
+const initialPieceIds = (): PieceIds =>
+  Object.fromEntries(SQUARES.map((square) => [square, square])) as Record<
+    Square,
+    Square
+  >;
 
 export const useChessStore = create<ChessStore>()((set, get) => {
   const seekTo = (
@@ -134,9 +144,7 @@ export const useChessStore = create<ChessStore>()((set, get) => {
   return {
     chess: new Chess(),
     // Swap square IDs along with pieces so their React identity survives a move.
-    pieceIds: Object.fromEntries(
-      SQUARES.map((square) => [square, square])
-    ) as Record<Square, Square>,
+    pieceIds: initialPieceIds(),
     historyEntries: [],
     historyMoves: [],
     historyIndex: 0,
@@ -297,6 +305,49 @@ export const useChessStore = create<ChessStore>()((set, get) => {
     goForward: () =>
       selectHistoryState(get()).canGoForward && seekTo(get().historyIndex + 1),
     seekTo,
+    undo: () => {
+      const state = get();
+      if (!selectHistoryState(state).canUndo) return false;
+      const entry = state.historyEntries.at(-1)!;
+      const chess = entry.chessBefore;
+      const pieceIds = entry.pieceIdsBefore;
+      set({
+        chess,
+        pieceIds,
+        historyEntries: state.historyEntries.slice(0, -1),
+        historyMoves: state.historyMoves.slice(0, -1),
+        historyIndex: state.historyEntries.length - 1,
+        positionRevision: state.positionRevision + 1,
+        selectedSquare: null,
+        lastPlayedMove: null,
+        transition: {
+          id: ++nextTransitionId,
+          duration: 200,
+          pieces: getPieceTransitions(
+            getBoardPieces(state.chess, state.pieceIds),
+            getBoardPieces(chess, pieceIds),
+            state.transition?.pieces
+          ),
+        },
+      });
+      return true;
+    },
+    reset: () => {
+      usePromotionStore.getState().cancelModal();
+      set({
+        chess: new Chess(),
+        pieceIds: initialPieceIds(),
+        historyEntries: [],
+        historyMoves: [],
+        historyIndex: 0,
+        transition: null,
+        selectedSquare: null,
+        lastPlayedMove: null,
+        movePending: false,
+        drag: null,
+        positionRevision: get().positionRevision + 1,
+      });
+    },
     getHistoryState: () => selectHistoryState(get()),
     finishTransition: (id) => {
       if (get().transition?.id === id) set({ transition: null });

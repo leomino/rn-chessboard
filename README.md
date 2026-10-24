@@ -159,6 +159,8 @@ export default function Game() {
 | `goBack()` | Starts one animated step backward. Returns `true` if accepted. |
 | `goForward()` | Starts one animated step forward. Returns `true` if accepted. |
 | `seekTo(index, options?)` | Jumps to any recorded position. Animates by default; pass `{ animated: false }` for instant scrubbing. Returns `true` if accepted, including an already-selected position. |
+| `undo()` | Permanently removes the last recorded half-move and animates to the new latest position. Returns `true` if accepted. |
+| `reset()` | Immediately clears the game and history and restores the standard starting position. Preserves orientation. |
 | `getHistoryState()` | Returns the current `ChessBoardHistoryState`. |
 
 Each step is one half-move (one player's move). The history state contains:
@@ -169,6 +171,7 @@ Each step is one half-move (one player's move). The history state contains:
 | `length` | Total recorded half-moves, including those ahead of the cursor. |
 | `moves` | Stable, read-only list of `{ index, san, moveNumber, color }` entries, including future moves. |
 | `canSeek` | Direct seeking is allowed; false during a piece drag or pending move/promotion. |
+| `canUndo` | There is a recorded move to undo and no piece drag or pending move/promotion. |
 | `canGoBack`, `canGoForward` | Whether that action is currently available. |
 | `isReviewing` | The displayed position is earlier than the latest position. |
 | `isAnimating` | A history transition is in progress. |
@@ -187,6 +190,16 @@ Earlier positions are read-only: return to the latest position to continue play.
 The complete timeline is preserved while browsing. `onMove` fires for newly
 played moves; use `onHistoryChange` to respond to navigation.
 
+`undo()` removes the latest recorded move even when reviewing an earlier position,
+then returns to the new end of the game. The removed move cannot be replayed with
+`goForward()`; once the undo animation completes, play can continue with a different
+move. Undo can interrupt playback, but returns `false` for an empty game or while
+dragging/choosing a promotion.
+
+`reset()` also cancels playback, drags, square selection, and pending promotion.
+Both operations notify `onHistoryChange` without firing `onMove`. The example app
+includes **Undo** and **Reset** buttons.
+
 Playback defaults to synchronized 200 ms piece animations, including both pieces during
 castling, captured-piece fades, en passant restoration, and promotion reversal.
 Promotions replay the original selection. Animations respect system reduced-motion
@@ -202,7 +215,8 @@ durations are rejected for animated seeks. Fades begin immediately in both direc
 `ChessBoardHistory` is an optional controlled component with move names, a selected
 move highlight, and previous/next chevrons. Tap a move to jump, or drag the strip
 to scrub through positions at its center. Pieces animate between selected positions
-while scrubbing, and the strip snaps to a move when scrolling stops. External navigation automatically
+while scrubbing. The strip uses normal native momentum and stops freely without
+snapping; the nearest move remains selected. External navigation automatically
 centers the selected move. **Start** selects the initial position.
 
 Fast scrubbing coalesces intermediate targets into at most one update every 50 ms;
@@ -234,7 +248,12 @@ function Game() {
 }
 ```
 
-The seeker accepts `history`, `onSeek`, and an optional container `style`.
+The seeker accepts `history`, `onSeek`, an optional container `style`, and an
+optional `onSelectionChange(index, move)` feedback callback. While scrubbing,
+the callback fires for every crossed position in order, including positions
+skipped by coalesced board updates. Taps/arrows report only their accepted
+destination. `move` is undefined at index `0`. Programmatic centering, undo/reset,
+and repeated scroll events within the same cell do not trigger this callback.
 `ChessBoardHistoryProps`, `ChessBoardHistoryMove`, and `ChessBoardSeekOptions`
 are exported for TypeScript consumers. Move numbering respects the starting
 position, including games starting with Black to move.
@@ -260,6 +279,26 @@ import * as Haptics from 'expo-haptics';
 
 React Native CLI apps can use their preferred haptics library in the same callback.
 When upgrading from 0.1.15, add this callback if you want to retain haptic feedback.
+
+For scrub, tap, and arrow navigation, use `onSelectionChange` for haptics.
+This separates move-boundary feedback from the board's throttled updates. Keep
+`onSeek` focused on navigation to avoid duplicate impacts. Feedback is delivered
+immediately without a delayed queue; very rapid impacts may merge on the device.
+
+```tsx
+<ChessBoardHistory
+  history={history}
+  onSeek={(index, options) => board.current?.seekTo(index, options)}
+  onSelectionChange={(_index, move) => {
+    Haptics.impactAsync(
+      /[x+#]/.test(move?.san ?? '')
+        ? Haptics.ImpactFeedbackStyle.Heavy
+        : Haptics.ImpactFeedbackStyle.Light
+    ).catch(console.warn);
+  }}
+/>
+```
+
 
 ## Contributing and license
 

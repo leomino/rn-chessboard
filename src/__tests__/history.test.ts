@@ -392,3 +392,112 @@ it('rejects invalid animation durations without changing the position', async ()
   expect(useChessStore.getState().seekTo(0, { duration: 0 })).toBe(true);
   expect(useChessStore.getState().transition?.duration).toBe(0);
 });
+
+it.each(fixtures)(
+  'permanently undoes each half-move: $name',
+  async ({ fen, moves }) => {
+    if (fen) useChessStore.setState({ chess: new Chess(fen) });
+    const positions = [snapshot()];
+    for (const san of moves) {
+      await play(san);
+      positions.push(snapshot());
+    }
+    for (let index = moves.length - 1; index >= 0; index--) {
+      expect(useChessStore.getState().undo()).toBe(true);
+      expect(snapshot()).toEqual(positions[index]);
+      expect(useChessStore.getState().historyEntries).toHaveLength(index);
+      expect(useChessStore.getState().getHistoryState()).toMatchObject({
+        index,
+        length: index,
+        canUndo: index > 0,
+        isReviewing: false,
+      });
+      finish();
+      expect(useChessStore.getState().goForward()).toBe(false);
+      expect(useChessStore.getState().seekTo(index + 1)).toBe(false);
+    }
+    expect(useChessStore.getState().undo()).toBe(false);
+  }
+);
+
+it('undo removes the last recorded move while reviewing, then permits a replacement move', async () => {
+  for (const san of ['e4', 'e5', 'Nf3']) await play(san);
+  useChessStore.getState().seekTo(0);
+  const oldTransition = useChessStore.getState().transition!.id;
+  expect(useChessStore.getState().undo()).toBe(true);
+  useChessStore.getState().finishTransition(oldTransition);
+  expect(useChessStore.getState().transition).not.toBeNull();
+  expect(useChessStore.getState().chess.history()).toEqual(['e4', 'e5']);
+  expect(useChessStore.getState().getHistoryState()).toMatchObject({
+    index: 2,
+    length: 2,
+    isReviewing: false,
+  });
+  finish();
+  await play('Nc3');
+  expect(
+    useChessStore
+      .getState()
+      .getHistoryState()
+      .moves.map((move) => move.san)
+  ).toEqual(['e4', 'e5', 'Nc3']);
+  useChessStore.getState().seekTo(0, { animated: false });
+  useChessStore.getState().seekTo(3, { animated: false });
+  expect(useChessStore.getState().chess.history()).toEqual(['e4', 'e5', 'Nc3']);
+});
+
+it('blocks undo during a drag, and reset invalidates stale gesture callbacks', async () => {
+  await play('e4');
+  const { beginDrag, endDrag, positionRevision } = useChessStore.getState();
+  beginDrag('e7', positionRevision);
+  expect(useChessStore.getState().getHistoryState().canUndo).toBe(false);
+  expect(useChessStore.getState().undo()).toBe(false);
+  useChessStore.getState().reset();
+  await endDrag('e7', 'e5', positionRevision);
+  await useChessStore.getState().move('e2', 'e4', positionRevision);
+  expect(useChessStore.getState().chess.fen()).toBe(new Chess().fen());
+  expect(useChessStore.getState().drag).toBeNull();
+  expect(useChessStore.getState().selectedSquare).toBeNull();
+  await play('d4');
+  expect(useChessStore.getState().chess.history()).toEqual(['d4']);
+});
+
+it('reset cancels pending promotion and prevents it from writing into the new game', async () => {
+  useChessStore.setState({ chess: new Chess('7k/P7/8/8/8/8/8/7K w - - 0 1') });
+  await play('Kg1');
+  await play('Kg8');
+  const promotion = useChessStore.getState().move('a7', 'a8');
+  expect(useChessStore.getState().undo()).toBe(false);
+  useChessStore.getState().reset();
+  await play('e4');
+  usePromotionStore.getState().closeModal('q');
+  await promotion;
+  expect(usePromotionStore.getState().modalOpen).toBe(false);
+  expect(useChessStore.getState().movePending).toBe(false);
+  expect(useChessStore.getState().chess.history()).toEqual(['e4']);
+  expect(useChessStore.getState().historyEntries).toHaveLength(1);
+});
+
+it('reset clears history, identities and playback while preserving orientation', async () => {
+  const initial = snapshot();
+  for (const san of ['e4', 'd5', 'exd5']) await play(san);
+  useChessStore.getState().setOrientation('b');
+  useChessStore.getState().seekTo(0);
+  const oldTransition = useChessStore.getState().transition!.id;
+  useChessStore.getState().reset();
+  expect(snapshot()).toEqual(initial);
+  expect(useChessStore.getState().orientation).toBe('b');
+  expect(useChessStore.getState().lastPlayedMove).toBeNull();
+  expect(useChessStore.getState().getHistoryState()).toMatchObject({
+    index: 0,
+    length: 0,
+    moves: [],
+    canUndo: false,
+    isAnimating: false,
+  });
+  await play('d4');
+  useChessStore.getState().goBack();
+  const transition = useChessStore.getState().transition;
+  useChessStore.getState().finishTransition(oldTransition);
+  expect(useChessStore.getState().transition).toBe(transition);
+});

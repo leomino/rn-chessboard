@@ -14,6 +14,7 @@ jest.mock('react-native', () => ({
 let renderer: ReactTestRenderer;
 const scrollTo = jest.fn();
 const onSeek = jest.fn(() => true);
+const onSelectionChange = jest.fn();
 const history: ChessBoardHistoryState = {
   index: 2,
   length: 3,
@@ -23,6 +24,7 @@ const history: ChessBoardHistoryState = {
     { index: 3, san: 'Nf3', moveNumber: 2, color: 'w' },
   ],
   canSeek: true,
+  canUndo: true,
   canGoBack: true,
   canGoForward: true,
   isReviewing: true,
@@ -44,9 +46,16 @@ beforeEach(() => {
   jest.clearAllMocks();
   onSeek.mockReturnValue(true);
   act(() => {
-    renderer = create(<ChessBoardHistory history={history} onSeek={onSeek} />, {
-      createNodeMock: () => ({ scrollTo }),
-    });
+    renderer = create(
+      <ChessBoardHistory
+        history={history}
+        onSeek={onSeek}
+        onSelectionChange={onSelectionChange}
+      />,
+      {
+        createNodeMock: () => ({ scrollTo }),
+      }
+    );
   });
   act(() =>
     strip().props.onLayout({ nativeEvent: { layout: { width: 200 } } })
@@ -94,7 +103,8 @@ it('centers external navigation, ignores programmatic scrolling, and seeks on ta
   expect(onSeek).toHaveBeenLastCalledWith(0, { animated: true });
 });
 
-it('scrubs only on move changes, follows momentum, and snaps to the final move', () => {
+it('scrubs only on move changes and follows native momentum without snapping', () => {
+  scrollTo.mockClear();
   act(() => strip().props.onScrollBeginDrag());
   expect(onSeek).not.toHaveBeenCalled();
   act(() => strip().props.onScroll(scrollEvent(100)));
@@ -107,7 +117,7 @@ it('scrubs only on move changes, follows momentum, and snaps to the final move',
   act(() => jest.advanceTimersByTime(50));
   expect(onSeek).toHaveBeenLastCalledWith(3, { animated: true, duration: 80 });
   act(() => strip().props.onMomentumScrollEnd(scrollEvent(240)));
-  expect(scrollTo).toHaveBeenLastCalledWith({ x: 240, animated: true });
+  expect(scrollTo).not.toHaveBeenCalled();
   const count = onSeek.mock.calls.length;
   act(() => strip().props.onScroll(scrollEvent(165)));
   act(() => jest.runAllTimers());
@@ -126,7 +136,49 @@ it('settles drags without momentum and does not recenter while a user is draggin
   expect(scrollTo).not.toHaveBeenCalled();
   act(() => strip().props.onScrollEndDrag(scrollEvent(98)));
   act(() => jest.advanceTimersByTime(120));
-  expect(scrollTo).toHaveBeenLastCalledWith({ x: 100, animated: true });
+  expect(scrollTo).not.toHaveBeenCalled();
+});
+
+it('keeps the natural resting offset after controlled cursor and layout updates', () => {
+  scrollTo.mockClear();
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(93)));
+  act(() => strip().props.onScrollEndDrag(scrollEvent(93)));
+  act(() => jest.advanceTimersByTime(120));
+  expect(onSeek).toHaveBeenLastCalledWith(1, { animated: true, duration: 80 });
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory history={{ ...history, index: 1 }} onSeek={onSeek} />
+    )
+  );
+  act(() => strip().props.onContentSizeChange());
+  expect(scrollTo).not.toHaveBeenCalled();
+
+  // Navigation originating outside the gesture still brings its move into view.
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory history={{ ...history, index: 3 }} onSeek={onSeek} />
+    )
+  );
+  expect(scrollTo).toHaveBeenLastCalledWith({ x: 240, animated: false });
+});
+
+it('lets native momentum continue past the no-momentum fallback timeout', () => {
+  scrollTo.mockClear();
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(100)));
+  act(() => strip().props.onScrollEndDrag(scrollEvent(100)));
+  act(() => strip().props.onMomentumScrollBegin());
+  act(() => jest.advanceTimersByTime(500));
+  act(() => strip().props.onScroll(scrollEvent(230)));
+  expect(onSeek).toHaveBeenLastCalledWith(3, { animated: true, duration: 80 });
+  act(() => strip().props.onMomentumScrollEnd(scrollEvent(232)));
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory history={{ ...history, index: 3 }} onSeek={onSeek} />
+    )
+  );
+  expect(scrollTo).not.toHaveBeenCalled();
 });
 
 it('disables input while the board is busy and handles an empty timeline', () => {
@@ -151,10 +203,11 @@ it('disables input while the board is busy and handles an empty timeline', () =>
     renderer.update(<ChessBoardHistory history={null} onSeek={onSeek} />)
   );
   expect(item('Initial position').props.accessibilityState.selected).toBe(true);
-  expect(strip().props.snapToOffsets).toHaveLength(1);
+  expect(strip().props.snapToOffsets).toBeUndefined();
 });
 
 it('coalesces fast scrubbing to the latest target and flushes the final position immediately', () => {
+  scrollTo.mockClear();
   act(() => strip().props.onScrollBeginDrag());
   act(() => strip().props.onScroll(scrollEvent(100)));
   expect(onSeek).toHaveBeenCalledTimes(1);
@@ -178,7 +231,7 @@ it('coalesces fast scrubbing to the latest target and flushes the final position
   });
   act(() => jest.runAllTimers());
   expect(onSeek).toHaveBeenCalledTimes(3);
-  expect(scrollTo).toHaveBeenLastCalledWith({ x: 30, animated: true });
+  expect(scrollTo).not.toHaveBeenCalled();
 });
 
 it('cancels pending scrub work on taps and unmount', () => {
@@ -216,4 +269,160 @@ it('uses the latest seek callback for deferred work and leaves unchanged move ce
   act(() => jest.advanceTimersByTime(50));
   expect(replacement).toHaveBeenCalledWith(3, { animated: true, duration: 80 });
   expect(onSeek).toHaveBeenCalledTimes(1);
+});
+
+it.each([0, 2])(
+  'cancels deferred scrubbing when the timeline is reset or shortened to %i moves',
+  (length) => {
+    act(() => strip().props.onScrollBeginDrag());
+    act(() => strip().props.onScroll(scrollEvent(100)));
+    act(() => strip().props.onScroll(scrollEvent(165)));
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    act(() =>
+      renderer.update(
+        <ChessBoardHistory
+          history={{
+            ...history,
+            index: length,
+            length,
+            moves: history.moves.slice(0, length),
+          }}
+          onSeek={onSeek}
+        />
+      )
+    );
+    act(() => jest.runAllTimers());
+    // A stale native momentum event must not override the undo/reset either.
+    act(() => strip().props.onMomentumScrollEnd(scrollEvent(30)));
+    expect(onSeek).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      x: length === 0 ? 30 : 165,
+      animated: false,
+    });
+  }
+);
+
+it('reports every crossed position even when native events and board updates skip moves', () => {
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(30)));
+  expect(onSelectionChange.mock.calls).toEqual([
+    [1, history.moves[0]],
+    [0, undefined],
+  ]);
+  act(() => strip().props.onScroll(scrollEvent(240)));
+  expect(onSelectionChange.mock.calls).toEqual([
+    [1, history.moves[0]],
+    [0, undefined],
+    [1, history.moves[0]],
+    [2, history.moves[1]],
+    [3, history.moves[2]],
+  ]);
+  // The board still coalesces this burst to two seeks, but feedback isn't lost.
+  expect(onSeek).toHaveBeenCalledTimes(1);
+  act(() => jest.advanceTimersByTime(50));
+  expect(onSeek).toHaveBeenCalledTimes(2);
+  expect(onSeek).toHaveBeenLastCalledWith(3, { animated: true, duration: 80 });
+  act(() => strip().props.onMomentumScrollEnd(scrollEvent(240)));
+  act(() => jest.runAllTimers());
+  expect(onSelectionChange).toHaveBeenCalledTimes(5);
+});
+
+it('tracks reversals independently of the board cursor and deduplicates same-cell events', () => {
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(100)));
+  act(() => strip().props.onScroll(scrollEvent(102)));
+  act(() => strip().props.onScroll(scrollEvent(240)));
+  act(() => strip().props.onScroll(scrollEvent(100)));
+  expect(onSelectionChange.mock.calls.map(([index]) => index)).toEqual([
+    1, 2, 3, 2, 1,
+  ]);
+  // Returning to the already-applied position cancels the pending seek.
+  act(() => strip().props.onScrollEndDrag(scrollEvent(100)));
+  act(() => jest.runAllTimers());
+  expect(onSeek).toHaveBeenCalledTimes(1);
+  expect(onSelectionChange).toHaveBeenCalledTimes(5);
+});
+
+it('only reports the destination of accepted taps/arrows and ignores programmatic centering', () => {
+  act(() => strip().props.onScroll(scrollEvent(30)));
+  expect(onSelectionChange).not.toHaveBeenCalled();
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory
+        history={{ ...history, index: 0 }}
+        onSeek={onSeek}
+        onSelectionChange={onSelectionChange}
+      />
+    )
+  );
+  act(() => strip().props.onScroll(scrollEvent(30)));
+  expect(onSelectionChange).not.toHaveBeenCalled();
+  act(() => item('Move 2, White, Nf3').props.onPress());
+  expect(onSelectionChange.mock.calls).toEqual([[3, history.moves[2]]]);
+  act(() => item('Move 2, White, Nf3').props.onPress());
+  expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  onSeek.mockReturnValue(false);
+  act(() => item('Initial position').props.onPress());
+  expect(onSelectionChange).toHaveBeenCalledTimes(1);
+  onSeek.mockReturnValue(true);
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory
+        history={{ ...history, index: 3 }}
+        onSeek={onSeek}
+        onSelectionChange={onSelectionChange}
+      />
+    )
+  );
+  act(() => item('Previous move').props.onPress());
+  expect(onSelectionChange).toHaveBeenLastCalledWith(2, history.moves[1]);
+});
+
+it('uses the latest feedback callback without replaying earlier crossings', () => {
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(30)));
+  const replacement = jest.fn();
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory
+        history={{ ...history, index: 0 }}
+        onSeek={onSeek}
+        onSelectionChange={replacement}
+      />
+    )
+  );
+  act(() => strip().props.onScroll(scrollEvent(240)));
+  expect(onSelectionChange.mock.calls.map(([index]) => index)).toEqual([1, 0]);
+  expect(replacement.mock.calls.map(([index]) => index)).toEqual([1, 2, 3]);
+});
+
+it('does not emit feedback after reset or while seeking is disabled', () => {
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(100)));
+  act(() => strip().props.onScroll(scrollEvent(240)));
+  const count = onSelectionChange.mock.calls.length;
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory
+        history={{ ...history, index: 0, length: 0, moves: [] }}
+        onSeek={onSeek}
+        onSelectionChange={onSelectionChange}
+      />
+    )
+  );
+  act(() => strip().props.onMomentumScrollEnd(scrollEvent(30)));
+  act(() => jest.runAllTimers());
+  expect(onSelectionChange).toHaveBeenCalledTimes(count);
+  act(() =>
+    renderer.update(
+      <ChessBoardHistory
+        history={{ ...history, canSeek: false }}
+        onSeek={onSeek}
+        onSelectionChange={onSelectionChange}
+      />
+    )
+  );
+  act(() => strip().props.onScrollBeginDrag());
+  act(() => strip().props.onScroll(scrollEvent(100)));
+  expect(onSelectionChange).toHaveBeenCalledTimes(count);
 });

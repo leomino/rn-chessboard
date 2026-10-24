@@ -24,6 +24,8 @@ export type ChessBoardHistoryState = {
   moves: readonly ChessBoardHistoryMove[];
   /** Seeking may interrupt playback, but not a piece drag or pending move. */
   canSeek: boolean;
+  /** The latest recorded half-move can be permanently removed. */
+  canUndo: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   isReviewing: boolean;

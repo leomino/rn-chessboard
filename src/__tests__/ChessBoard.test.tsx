@@ -187,6 +187,7 @@ it('exposes navigation state and reports new moves once even when React batches 
     length: 0,
     moves: [],
     canSeek: true,
+    canUndo: false,
     canGoBack: false,
     canGoForward: false,
     isReviewing: false,
@@ -211,6 +212,7 @@ it('exposes navigation state and reports new moves once even when React batches 
       { index: 2, san: 'e5', moveNumber: 1, color: 'b' },
     ],
     canSeek: true,
+    canUndo: true,
     canGoBack: false,
     canGoForward: false,
     isReviewing: true,
@@ -273,6 +275,48 @@ it('exposes direct seeking and reports cursor changes without emitting played mo
   );
   expect(useChessStore.getState().chess.history()).toEqual(['e4']);
   expect(onMove).toHaveBeenCalledTimes(2);
+});
+
+it('exposes undo and reset and reports history edits without firing onMove', async () => {
+  const ref = createRef<ChessBoardRef>();
+  const onMove = jest.fn();
+  const onHistoryChange = jest.fn();
+  act(() => {
+    renderer = create(
+      <ChessBoard ref={ref} onMove={onMove} onHistoryChange={onHistoryChange} />
+    );
+  });
+  expect(ref.current?.undo()).toBe(false);
+  await act(async () => {
+    await useChessStore.getState().move('e2', 'e4');
+    await useChessStore.getState().move('e7', 'e5');
+  });
+  act(() => {
+    expect(ref.current?.undo()).toBe(true);
+  });
+  expect(onHistoryChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ index: 1, length: 1, canUndo: true })
+  );
+  expect(onMove).toHaveBeenCalledTimes(2);
+  const oldCompletion = jest.mocked(withTiming).mock.calls.at(-1)![2]!;
+  act(() => {
+    ref.current?.reset();
+  });
+  act(() => oldCompletion(true));
+  expect(onHistoryChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      index: 0,
+      length: 0,
+      moves: [],
+      canUndo: false,
+      isAnimating: false,
+    })
+  );
+  expect(onMove).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    await useChessStore.getState().move('d2', 'd4');
+  });
+  expect(onMove).toHaveBeenCalledTimes(3);
 });
 
 it('keeps the moving piece mounted and renders a capture victim until playback completes', async () => {

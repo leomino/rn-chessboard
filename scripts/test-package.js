@@ -123,9 +123,11 @@ const props: ChessBoardProps = {
 ref.current?.setOrientation('b');
 inferredRef.current?.setOrientation('w');
 const accepted: boolean | undefined = ref.current?.goBack();
+const undone: boolean | undefined = ref.current?.undo();
+ref.current?.reset();
 inferredRef.current?.goForward();
 const history: ChessBoardHistoryState | undefined = ref.current?.getHistoryState();
-console.log(accepted, history);
+console.log(accepted, undone, history, history?.canUndo);
 const options: ChessBoardSeekOptions = { animated: true, duration: 80 };
 const sought: boolean | undefined = ref.current?.seekTo(0, options);
 const moves: readonly ChessBoardHistoryMove[] = history?.moves ?? [];
@@ -136,7 +138,7 @@ ref.current?.goForward(1);
 ref.current?.setOrientation('invalid');
 // @ts-expect-error Invalid ref handles must be rejected.
 const invalid = <ChessBoard ref={createRef<{ wrong: string }>()} />;
-export default function App() { return <><ChessBoard {...props} ref={ref} /><ChessBoardHistory history={history ?? null} onSeek={(index, options) => ref.current?.seekTo(index, options)} /></>; }
+export default function App() { return <><ChessBoard {...props} ref={ref} /><ChessBoardHistory history={history ?? null} onSeek={(index, options) => ref.current?.seekTo(index, options)} onSelectionChange={(index, move) => { console.log(index, move?.san); }} /></>; }
 `
   );
   for (const resolution of ['node16', 'bundler']) {

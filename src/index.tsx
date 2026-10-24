@@ -36,6 +36,10 @@ type ChessBoardRef = {
   goForward: () => boolean;
   /** Seek directly, interrupting playback. Defaults to animated. */
   seekTo: (index: number, options?: ChessBoardSeekOptions) => boolean;
+  /** Remove the last recorded half-move and animate to the new latest position. */
+  undo: () => boolean;
+  /** Clear the game and cancel interactions, preserving board orientation. */
+  reset: () => void;
   getHistoryState: () => ChessBoardHistoryState;
 };
 
@@ -58,6 +62,8 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
     const goBack = useChessStore((state) => state.goBack);
     const goForward = useChessStore((state) => state.goForward);
     const seekTo = useChessStore((state) => state.seekTo);
+    const undo = useChessStore((state) => state.undo);
+    const reset = useChessStore((state) => state.reset);
     const getHistoryState = useChessStore((state) => state.getHistoryState);
     const callbacks = useRef({ onMove, onHistoryChange });
     const clock = useHistoryAnimation(transition, orientation);
@@ -111,6 +117,8 @@ const ChessBoard = forwardRef<ChessBoardRef, ChessBoardProps>(
       goBack,
       goForward,
       seekTo,
+      undo,
+      reset,
       getHistoryState,
     }));
 

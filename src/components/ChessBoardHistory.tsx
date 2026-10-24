@@ -43,6 +43,12 @@ export type ChessBoardHistoryProps = {
     index: number,
     options?: ChessBoardSeekOptions
   ) => boolean | undefined;
+  /** Feedback for each crossed position while scrubbing, or one accepted tap/arrow selection.
+   * Independent of throttled board updates. Move is undefined at the start. */
+  onSelectionChange?: (
+    index: number,
+    move: ChessBoardHistoryMove | undefined
+  ) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -50,6 +56,7 @@ export type ChessBoardHistoryProps = {
 export default function ChessBoardHistory({
   history,
   onSeek,
+  onSelectionChange,
   style,
 }: ChessBoardHistoryProps) {
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -57,8 +64,11 @@ export default function ChessBoardHistory({
   const [centers, setCenters] = useState<Record<number, number>>({});
   const userScrolling = useRef(false);
   const dragging = useRef(false);
+  const momentum = useRef(false);
+  const scrubbedIndex = useRef<number | null>(null);
   const offset = useRef(0);
   const lastRequested = useRef(0);
+  const lastFocused = useRef(history?.index ?? 0);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingTarget = useRef<number | null>(null);
@@ -68,11 +78,39 @@ export default function ChessBoardHistory({
   const index = history?.index ?? 0;
   const moves = history?.moves ?? EMPTY_MOVES;
   const canSeek = history?.canSeek ?? false;
+  const previousMoves = useRef(moves);
+  const feedback = useRef({ onSelectionChange, moves });
 
   useLayoutEffect(() => {
     seek.current = onSeek;
     geometry.current = { width, centers };
-  }, [onSeek, width, centers]);
+    feedback.current = { onSelectionChange, moves };
+  }, [onSeek, width, centers, onSelectionChange, moves]);
+
+  useLayoutEffect(() => {
+    if (!userScrolling.current) lastFocused.current = index;
+  }, [index]);
+
+  const notifySelection = useCallback((target: number, crossed: boolean) => {
+    const previous = lastFocused.current;
+    lastFocused.current = target;
+    const { onSelectionChange: notify, moves: timeline } = feedback.current;
+    if (!notify || target === previous) return;
+    if (!crossed) {
+      notify(target, timeline[target - 1]);
+      return;
+    }
+    // A native scroll event may span multiple cells. Report each boundary in
+    // order, without replaying positions or queuing delayed haptic work.
+    const direction = target > previous ? 1 : -1;
+    for (
+      let position = previous + direction;
+      position !== target + direction;
+      position += direction
+    ) {
+      notify(position, timeline[position - 1]);
+    }
+  }, []);
 
   const clearSettleTimer = useCallback(() => {
     if (settleTimer.current !== null) clearTimeout(settleTimer.current);
@@ -83,6 +121,22 @@ export default function ChessBoardHistory({
     if (scrubTimer.current !== null) clearTimeout(scrubTimer.current);
     scrubTimer.current = null;
   }, []);
+
+  useLayoutEffect(() => {
+    if (previousMoves.current === moves) return;
+    previousMoves.current = moves;
+    // Undo/reset may invalidate a deferred scrub target, including a target
+    // that would still be in range but now belongs to a different game.
+    clearSettleTimer();
+    clearScrubTimer();
+    pendingTarget.current = null;
+    userScrolling.current = false;
+    dragging.current = false;
+    momentum.current = false;
+    scrubbedIndex.current = null;
+    lastRequested.current = index;
+    lastFocused.current = index;
+  }, [moves, index, clearSettleTimer, clearScrubTimer]);
 
   useEffect(
     () => () => {
@@ -104,11 +158,15 @@ export default function ChessBoardHistory({
 
   useEffect(() => {
     if (userScrolling.current || !width || centers[index] === undefined) return;
+    // A controlled cursor update from scrubbing must not pull the native scroll
+    // view back to a cell center after the finger/momentum has stopped.
+    if (scrubbedIndex.current === index) return;
+    scrubbedIndex.current = null;
     scroll.current?.scrollTo({
       x: Math.max(0, centers[index] - width / 2),
       animated: false,
     });
-  }, [index, width, centers]);
+  }, [index, width, centers, moves]);
 
   const seekPending = useCallback(() => {
     const target = pendingTarget.current;
@@ -119,13 +177,16 @@ export default function ChessBoardHistory({
       seek.current(target, { animated: true, duration: SCRUB_DURATION })
     ) {
       lastRequested.current = target;
+      scrubbedIndex.current = target;
       lastSeekAt.current = Date.now();
     }
     return lastRequested.current;
   }, []);
 
   const scrub = () => {
-    pendingTarget.current = nearestMove();
+    const target = nearestMove();
+    notifySelection(target, true);
+    pendingTarget.current = target;
     const delay = SCRUB_INTERVAL - (Date.now() - lastSeekAt.current);
     if (pendingTarget.current === lastRequested.current) {
       clearScrubTimer();
@@ -146,10 +207,10 @@ export default function ChessBoardHistory({
     if (!userScrolling.current) return;
     clearScrubTimer();
     pendingTarget.current = nearestMove();
-    const target = seekPending();
+    seekPending();
     userScrolling.current = false;
     dragging.current = false;
-    centerMove(target, true);
+    momentum.current = false;
   };
 
   // Some native drags end without a momentum-end event. Settle after the last
@@ -163,9 +224,9 @@ export default function ChessBoardHistory({
     nativeEvent,
   }: NativeSyntheticEvent<NativeScrollEvent>) => {
     offset.current = nativeEvent.contentOffset.x;
-    if (!userScrolling.current) return;
+    if (!userScrolling.current || !canSeek) return;
     scrub();
-    if (!dragging.current) scheduleSettle();
+    if (!dragging.current && !momentum.current) scheduleSettle();
   };
 
   const jump = useCallback(
@@ -175,9 +236,14 @@ export default function ChessBoardHistory({
       pendingTarget.current = null;
       userScrolling.current = false;
       dragging.current = false;
-      if (seek.current(target, { animated: true })) centerMove(target, false);
+      momentum.current = false;
+      scrubbedIndex.current = null;
+      if (seek.current(target, { animated: true })) {
+        notifySelection(target, false);
+        centerMove(target, false);
+      }
     },
-    [clearSettleTimer, clearScrubTimer, centerMove]
+    [clearSettleTimer, clearScrubTimer, centerMove, notifySelection]
   );
 
   const items = useMemo(
@@ -207,10 +273,6 @@ export default function ChessBoardHistory({
           : [{ index: item.index, offset: Math.max(0, center - width / 2) }];
       }),
     [items, centers, width]
-  );
-  const snapOffsets = useMemo(
-    () => measured.map((item) => item.offset),
-    [measured]
   );
 
   const nearestMove = () => {
@@ -254,22 +316,24 @@ export default function ChessBoardHistory({
         contentContainerStyle={{ paddingHorizontal: width / 2 }}
         showsHorizontalScrollIndicator={false}
         scrollEnabled={canSeek}
-        bounces={false}
-        decelerationRate="fast"
         scrollEventThrottle={16}
-        snapToOffsets={snapOffsets}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         onContentSizeChange={() => {
-          if (!userScrolling.current) centerMove(index, false);
+          if (!userScrolling.current && scrubbedIndex.current !== index)
+            centerMove(index, false);
         }}
         onScroll={handleScroll}
         onScrollBeginDrag={() => {
+          if (!canSeek) return;
           clearSettleTimer();
           clearScrubTimer();
           pendingTarget.current = null;
           lastSeekAt.current = -Infinity;
+          if (!userScrolling.current) lastFocused.current = index;
           userScrolling.current = true;
           dragging.current = true;
+          momentum.current = false;
+          scrubbedIndex.current = index;
           lastRequested.current = index;
         }}
         onScrollEndDrag={(event) => {
@@ -277,7 +341,11 @@ export default function ChessBoardHistory({
           dragging.current = false;
           scheduleSettle();
         }}
-        onMomentumScrollBegin={clearSettleTimer}
+        onMomentumScrollBegin={() => {
+          if (!userScrolling.current) return;
+          clearSettleTimer();
+          momentum.current = true;
+        }}
         onMomentumScrollEnd={(event) => {
           handleScroll(event);
           finishScroll();
